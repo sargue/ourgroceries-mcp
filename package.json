@@ -5,8 +5,7 @@
   "type": "module",
   "main": "build/index.js",
   "bin": {
-    "ourgroceries-mcp": "build/index.js",
-    "ourgroceries-login": "build/cli.js"
+    "ourgroceries-mcp": "build/cli.js"
   },
   "scripts": {
     "build": "tsc",

@@ -14,16 +14,27 @@ This MCP server provides tools to:
 
 ## Installation
 
+### From GitHub (Recommended)
+
 ```bash
+npm install -g github:yourusername/ourgroceries-mcp
+```
+
+### From Source
+
+```bash
+git clone <repository-url>
+cd ourgroceries-mcp
 npm install
 npm run build
+npm link
 ```
 
 ## Configuration
 
-### Quick Start (Recommended)
+### Step 1: Login
 
-The easiest way to configure the server is using the CLI login command:
+Run the login command to authenticate:
 
 ```bash
 npx ourgroceries-mcp login
@@ -31,20 +42,22 @@ npx ourgroceries-mcp login
 
 This will prompt you for your OurGroceries email and password, then automatically save your credentials to `~/.config/ourgroceries-mcp/config.json` (or the appropriate config directory for your platform).
 
-### Claude Desktop Setup
+### Step 2: Configure Claude Desktop
 
-After logging in, add the server to your Claude Desktop config (typically at `~/Library/Application Support/Claude/claude_desktop_config.json`):
+Add the server to your Claude Desktop config (typically at `~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "ourgroceries": {
-      "command": "node",
-      "args": ["/path/to/ourgroceries-mcp/build/index.js"]
+      "command": "npx",
+      "args": ["ourgroceries-mcp"]
     }
   }
 }
 ```
+
+That's it! The server will automatically read your credentials from the config file.
 
 ### Alternative: Manual Configuration with Environment Variables
 
@@ -68,8 +81,8 @@ If you prefer not to use the CLI login, you can manually configure credentials u
 {
   "mcpServers": {
     "ourgroceries": {
-      "command": "node",
-      "args": ["/path/to/ourgroceries-mcp/build/index.js"],
+      "command": "npx",
+      "args": ["ourgroceries-mcp"],
       "env": {
         "OURGROCERIES_AUTH_COOKIE": "your-auth-cookie-value-here",
         "OURGROCERIES_TEAM_ID": "your-team-id-here"
