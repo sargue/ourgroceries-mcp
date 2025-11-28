@@ -35,38 +35,52 @@ program
 program
   .command("login")
   .description("Log in to OurGroceries and save credentials")
-  .action(async () => {
+  .option("-e, --email <email>", "Email address")
+  .option("-p, --password <password>", "Password")
+  .option("-d, --debug", "Enable debug logging")
+  .action(async (options) => {
     try {
       console.log("OurGroceries Login\n");
 
-      const response = await prompts([
-        {
-          type: "text",
-          name: "email",
-          message: "Email:",
-          validate: (value) =>
-            value.includes("@") ? true : "Please enter a valid email",
-        },
-        {
-          type: "password",
-          name: "password",
-          message: "Password:",
-          validate: (value) =>
-            value.length > 0 ? true : "Password cannot be empty",
-        },
-      ]);
+      let email = options.email;
+      let password = options.password;
 
-      // Check if user cancelled (Ctrl+C)
-      if (!response.email || !response.password) {
-        console.log("\nLogin cancelled");
-        process.exit(0);
+      // If credentials not provided as arguments, prompt for them
+      if (!email || !password) {
+        const response = await prompts([
+          {
+            type: "text",
+            name: "email",
+            message: "Email:",
+            initial: email,
+            validate: (value) =>
+              value.includes("@") ? true : "Please enter a valid email",
+          },
+          {
+            type: "password",
+            name: "password",
+            message: "Password:",
+            validate: (value) =>
+              value.length > 0 ? true : "Password cannot be empty",
+          },
+        ]);
+
+        // Check if user cancelled (Ctrl+C)
+        if (!response.email || !response.password) {
+          console.log("\nLogin cancelled");
+          process.exit(0);
+        }
+
+        email = response.email;
+        password = response.password;
       }
 
       console.log("\nAuthenticating...");
 
       const { authCookie, teamId } = await login(
-        response.email,
-        response.password
+        email,
+        password,
+        options.debug
       );
 
       await saveConfig({ authCookie, teamId });
@@ -79,6 +93,9 @@ program
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`\n✗ Login failed: ${errorMessage}`);
+      if (options.debug && error instanceof Error && error.stack) {
+        console.error("\nStack trace:", error.stack);
+      }
       process.exit(1);
     }
   });
