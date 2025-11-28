@@ -7,18 +7,31 @@
   "bin": {
     "ourgroceries-mcp": "build/cli.js"
   },
+  "files": [
+    "build",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
     "watch": "tsc --watch"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justincampbell/ourgroceries-mcp.git"
+  },
+  "homepage": "https://github.com/justincampbell/ourgroceries-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/justincampbell/ourgroceries-mcp/issues"
+  },
   "keywords": [
-    "mcp",
     "ourgroceries",
     "grocery-list",
+    "mcp",
     "model-context-protocol"
   ],
-  "author": "",
+  "author": "Justin Campbell <justin@justincampbell.me>",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",

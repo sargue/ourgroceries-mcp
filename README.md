@@ -14,20 +14,14 @@ This MCP server provides tools to:
 
 ## Installation
 
-### From GitHub (Recommended)
-
 ```bash
-npm install -g github:yourusername/ourgroceries-mcp
+npm install -g ourgroceries-mcp
 ```
 
-### From Source
+Or use directly with `npx`:
 
 ```bash
-git clone <repository-url>
-cd ourgroceries-mcp
-npm install
-npm run build
-npm link
+npx ourgroceries-mcp login
 ```
 
 ## Configuration
