@@ -6,6 +6,9 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 
+// Use native fetch if available (Node 18+), otherwise use node-fetch
+const fetchImpl = globalThis.fetch || (await import("node-fetch")).default;
+
 const API_URL = "https://www.ourgroceries.com/your-lists";
 
 interface OurGroceriesConfig {
@@ -35,7 +38,7 @@ export class OurGroceriesServer {
   }
 
   private async makeRequest(command: Record<string, any>): Promise<any> {
-    const response = await fetch(API_URL, {
+    const response = await fetchImpl(API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=UTF-8",

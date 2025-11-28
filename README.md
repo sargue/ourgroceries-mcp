@@ -14,31 +14,30 @@ This MCP server provides tools to:
 
 ## Installation
 
-```bash
-npm install -g ourgroceries-mcp
-```
+### Step 1: Login to OurGroceries
 
-Or use directly with `npx`:
+Authenticate with your OurGroceries account:
 
 ```bash
 npx ourgroceries-mcp login
 ```
 
-## Configuration
+Enter your email and password when prompted.
 
-### Step 1: Login
+### Step 2: Add to Claude
 
-Run the login command to authenticate:
+#### For Claude Code
 
 ```bash
-npx ourgroceries-mcp login
+claude mcp add ourgroceries npx ourgroceries-mcp
 ```
 
-This will prompt you for your OurGroceries email and password, then automatically save your credentials to `~/.config/ourgroceries-mcp/config.json` (or the appropriate config directory for your platform).
+#### For Claude Desktop
 
-### Step 2: Configure Claude Desktop
+Add to your configuration file:
 
-Add the server to your Claude Desktop config (typically at `~/Library/Application Support/Claude/claude_desktop_config.json`):
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
@@ -51,103 +50,25 @@ Add the server to your Claude Desktop config (typically at `~/Library/Applicatio
 }
 ```
 
-That's it! The server will automatically read your credentials from the config file.
+Then restart Claude Desktop.
 
-### Alternative: Manual Configuration with Environment Variables
+## What You Can Do
 
-If you prefer not to use the CLI login, you can manually configure credentials using environment variables:
-
-1. **Get your Auth Cookie:**
-   - Log in to [OurGroceries.com](https://www.ourgroceries.com)
-   - Open Developer Tools (F12 or Cmd+Option+I)
-   - Go to Application/Storage → Cookies → `www.ourgroceries.com`
-   - Copy the `ourgroceries-auth` cookie value
-
-2. **Get your Team ID:**
-   - In Developer Tools, go to Network tab
-   - Interact with your lists (add/remove an item)
-   - Find a POST request to `your-lists`
-   - Copy the `teamId` from the request payload
-
-3. **Add to Claude Desktop config:**
-
-```json
-{
-  "mcpServers": {
-    "ourgroceries": {
-      "command": "npx",
-      "args": ["ourgroceries-mcp"],
-      "env": {
-        "OURGROCERIES_AUTH_COOKIE": "your-auth-cookie-value-here",
-        "OURGROCERIES_TEAM_ID": "your-team-id-here"
-      }
-    }
-  }
-}
-```
-
-## Available Tools
-
-### get_lists
-
-Get all grocery lists with their items.
-
-**Returns:** JSON with all lists, items, and settings.
-
-### add_item
-
-Add a new item to a grocery list.
-
-**Parameters:**
-- `listId` (required): The ID of the list
-- `value` (required): The name of the item
-- `note` (optional): A note for the item
-
-### remove_item
-
-Remove an item from a grocery list.
-
-**Parameters:**
-- `listId` (required): The ID of the list
-- `itemId` (required): The ID of the item to remove
-
-### update_item
-
-Update an item's details.
-
-**Parameters:**
-- `listId` (required): The ID of the list
-- `itemId` (required): The ID of the item
-- `newValue` (required): The new name for the item
-- `categoryId` (optional): Category ID or null
-- `note` (optional): Note text
-- `star` (optional): Star rating (0 or 1)
-
-### toggle_item
-
-Mark an item as crossed off or uncrossed.
-
-**Parameters:**
-- `listId` (required): The ID of the list
-- `itemId` (required): The ID of the item
-- `crossedOff` (required): true to cross off, false to uncross
+- **View your lists:** See all your grocery lists and items
+- **Add items:** Add new items to any list with optional notes
+- **Remove items:** Delete items from your lists
+- **Update items:** Change item names, categories, notes, or star ratings
+- **Check off items:** Mark items as crossed off or uncrossed
 
 ## Example Usage
 
-Once configured in Claude Desktop, you can ask:
+Once configured, you can ask Claude:
 
 - "What's on my grocery list?"
 - "Add milk to my shopping list"
 - "Mark eggs as crossed off"
 - "Remove bread from the list"
-
-## Development
-
-Watch mode for development:
-
-```bash
-npm run watch
-```
+- "Update the note on bananas to say 'organic'"
 
 ## License
 
