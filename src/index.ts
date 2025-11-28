@@ -7,6 +7,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { loadConfig, getConfigPath } from "./config.js";
 
 const API_URL = "https://www.ourgroceries.com/your-lists";
 
@@ -19,7 +20,7 @@ class OurGroceriesServer {
   private server: Server;
   private config: OurGroceriesConfig;
 
-  constructor() {
+  constructor(config: OurGroceriesConfig) {
     this.server = new Server(
       {
         name: "ourgroceries-mcp",
@@ -32,20 +33,7 @@ class OurGroceriesServer {
       }
     );
 
-    // Load config from environment variables
-    this.config = {
-      authCookie: process.env.OURGROCERIES_AUTH_COOKIE || "",
-      teamId: process.env.OURGROCERIES_TEAM_ID || "",
-    };
-
-    if (!this.config.authCookie) {
-      throw new Error("OURGROCERIES_AUTH_COOKIE environment variable is required");
-    }
-
-    if (!this.config.teamId) {
-      throw new Error("OURGROCERIES_TEAM_ID environment variable is required");
-    }
-
+    this.config = config;
     this.setupHandlers();
   }
 
@@ -342,5 +330,34 @@ class OurGroceriesServer {
   }
 }
 
-const server = new OurGroceriesServer();
-server.run().catch(console.error);
+async function main() {
+  // Try to load config from file first
+  let config = await loadConfig();
+
+  // Fall back to environment variables if config file doesn't exist
+  if (!config) {
+    const authCookie = process.env.OURGROCERIES_AUTH_COOKIE;
+    const teamId = process.env.OURGROCERIES_TEAM_ID;
+
+    if (authCookie && teamId) {
+      config = { authCookie, teamId };
+    }
+  }
+
+  // If no config found, provide helpful error message
+  if (!config) {
+    console.error("Error: No OurGroceries credentials found.\n");
+    console.error("Please run one of the following:\n");
+    console.error("  1. Login with CLI: npx ourgroceries-mcp login");
+    console.error("  2. Set environment variables:");
+    console.error("     - OURGROCERIES_AUTH_COOKIE");
+    console.error("     - OURGROCERIES_TEAM_ID\n");
+    console.error(`Config file location: ${getConfigPath()}`);
+    process.exit(1);
+  }
+
+  const server = new OurGroceriesServer(config);
+  await server.run();
+}
+
+main().catch(console.error);

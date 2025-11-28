@@ -21,29 +21,48 @@ npm run build
 
 ## Configuration
 
-You need to extract two pieces of information from your OurGroceries session:
+### Quick Start (Recommended)
 
-### 1. Get your Auth Cookie
+The easiest way to configure the server is using the CLI login command:
 
-1. Log in to [OurGroceries.com](https://www.ourgroceries.com) in your browser
-2. Open Developer Tools (F12 or Cmd+Option+I)
-3. Go to the Application/Storage tab
-4. Under Cookies, find `www.ourgroceries.com`
-5. Copy the value of the `ourgroceries-auth` cookie
+```bash
+npx ourgroceries-mcp login
+```
 
-The cookie value will be in format: `{id}|{hash}`
+This will prompt you for your OurGroceries email and password, then automatically save your credentials to `~/.config/ourgroceries-mcp/config.json` (or the appropriate config directory for your platform).
 
-### 2. Get your Team ID
+### Claude Desktop Setup
 
-1. While still in Developer Tools, go to the Network tab
-2. Interact with your grocery lists (add/remove an item)
-3. Find a POST request to `your-lists`
-4. Look at the request payload
-5. Copy the `teamId` value
+After logging in, add the server to your Claude Desktop config (typically at `~/Library/Application Support/Claude/claude_desktop_config.json`):
 
-### 3. Set Environment Variables
+```json
+{
+  "mcpServers": {
+    "ourgroceries": {
+      "command": "node",
+      "args": ["/path/to/ourgroceries-mcp/build/index.js"]
+    }
+  }
+}
+```
 
-Add to your Claude Desktop config (typically at `~/Library/Application Support/Claude/claude_desktop_config.json`):
+### Alternative: Manual Configuration with Environment Variables
+
+If you prefer not to use the CLI login, you can manually configure credentials using environment variables:
+
+1. **Get your Auth Cookie:**
+   - Log in to [OurGroceries.com](https://www.ourgroceries.com)
+   - Open Developer Tools (F12 or Cmd+Option+I)
+   - Go to Application/Storage → Cookies → `www.ourgroceries.com`
+   - Copy the `ourgroceries-auth` cookie value
+
+2. **Get your Team ID:**
+   - In Developer Tools, go to Network tab
+   - Interact with your lists (add/remove an item)
+   - Find a POST request to `your-lists`
+   - Copy the `teamId` from the request payload
+
+3. **Add to Claude Desktop config:**
 
 ```json
 {
