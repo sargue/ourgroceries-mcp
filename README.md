@@ -16,12 +16,15 @@ This MCP server provides tools to:
 
 ## Installation
 
+The npm package is published as `@sergib/ourgroceries-mcp`. The installed executable remains
+`ourgroceries-mcp`.
+
 ### Step 1: Login to OurGroceries
 
 Authenticate with your OurGroceries account:
 
 ```bash
-npx ourgroceries-mcp login
+npx -y @sergib/ourgroceries-mcp login
 ```
 
 Enter your email and password when prompted.
@@ -33,7 +36,7 @@ The login command saves an OurGroceries auth cookie and team ID. It does not sav
 #### For Claude Code
 
 ```bash
-claude mcp add ourgroceries npx ourgroceries-mcp
+claude mcp add ourgroceries npx -y @sergib/ourgroceries-mcp
 ```
 
 #### For Claude Desktop
@@ -48,7 +51,7 @@ Add to your configuration file:
   "mcpServers": {
     "ourgroceries": {
       "command": "npx",
-      "args": ["ourgroceries-mcp"]
+      "args": ["-y", "@sergib/ourgroceries-mcp"]
     }
   }
 }
@@ -68,7 +71,7 @@ On macOS and Linux, the config file is written with owner-only `0600` permission
 To remove saved credentials:
 
 ```bash
-npx ourgroceries-mcp logout
+npx -y @sergib/ourgroceries-mcp logout
 ```
 
 `logout` removes the saved config file only. It does not modify environment variables.
@@ -89,12 +92,12 @@ environment variables.
 If the server reports missing or invalid credentials, run:
 
 ```bash
-npx ourgroceries-mcp login
+npx -y @sergib/ourgroceries-mcp login
 ```
 
 Then restart your MCP client. If you use environment variables instead of the config file, refresh
-both variables. Login debug output from `npx ourgroceries-mcp login --debug` redacts passwords,
-auth cookies, and cookie headers.
+both variables. Login debug output from `npx -y @sergib/ourgroceries-mcp login --debug` redacts
+passwords, auth cookies, and cookie headers.
 
 ## What You Can Do
 
@@ -141,7 +144,7 @@ node build/cli.js
 ```
 
 Running `node build/cli.js` with no subcommand starts the MCP server over stdio, matching the
-published `ourgroceries-mcp` binary behavior.
+package's `ourgroceries-mcp` binary behavior.
 
 For local CLI testing with your own OurGroceries account, authenticate once:
 

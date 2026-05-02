@@ -190,7 +190,7 @@ test("client rejects non-OK OurGroceries responses", async () => {
 
   await assert.rejects(
     client.getLists(),
-    /OurGroceries rejected the configured credentials \(401 Unauthorized\).*npx ourgroceries-mcp login/
+    /OurGroceries rejected the configured credentials \(401 Unauthorized\).*npx -y @sergib\/ourgroceries-mcp login/
   );
 });
 

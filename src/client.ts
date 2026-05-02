@@ -1,6 +1,6 @@
 export const OURGROCERIES_API_URL = "https://www.ourgroceries.com/your-lists";
 const CREDENTIALS_HELP =
-  'Run "npx ourgroceries-mcp login" again, then restart your MCP client. If you use environment variables, refresh OURGROCERIES_AUTH_COOKIE and OURGROCERIES_TEAM_ID.';
+  'Run "npx -y @sergib/ourgroceries-mcp login" again, then restart your MCP client. If you use environment variables, refresh OURGROCERIES_AUTH_COOKIE and OURGROCERIES_TEAM_ID.';
 
 export interface OurGroceriesConfig {
   authCookie: string;

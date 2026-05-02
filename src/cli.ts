@@ -552,7 +552,7 @@ function printCredentialError(
   }
 
   console.error("\nFix by running:");
-  console.error("  npx ourgroceries-mcp login");
+  console.error("  npx -y @sergib/ourgroceries-mcp login");
   console.error("\nOr set both environment variables:");
   for (const name of envCredentialNames) {
     console.error(`  - ${name}`);

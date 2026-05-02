@@ -1,5 +1,5 @@
 {
-  "name": "ourgroceries-mcp",
+  "name": "@sergib/ourgroceries-mcp",
   "version": "1.0.1",
   "description": "MCP server for OurGroceries.com grocery list management",
   "type": "module",
