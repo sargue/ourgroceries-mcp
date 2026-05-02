@@ -5,11 +5,12 @@ import prompts from "prompts";
 import { login } from "./auth.js";
 import { saveConfig, getConfigPath, loadConfigResult, removeConfig } from "./config.js";
 import type { Config, ConfigLoadResult } from "./config.js";
+import { VERSION } from "./version.js";
 
 const program = new Command();
 const envCredentialNames = ["OURGROCERIES_AUTH_COOKIE", "OURGROCERIES_TEAM_ID"] as const;
 
-program.name("ourgroceries-mcp").description("OurGroceries MCP server").version("1.0.0");
+program.name("ourgroceries-mcp").description("OurGroceries MCP server").version(VERSION);
 
 program
   .command("login")

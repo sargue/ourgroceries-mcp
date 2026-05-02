@@ -19,6 +19,15 @@ interface TempCliHome {
 }
 
 const cliPath = fileURLToPath(new URL("../src/cli.js", import.meta.url));
+const packageJsonPath = fileURLToPath(new URL("../../package.json", import.meta.url));
+
+async function readPackageVersion(): Promise<string> {
+  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf-8")) as {
+    version: string;
+  };
+
+  return packageJson.version;
+}
 
 async function withTempCliHome(run: (tempCliHome: TempCliHome) => Promise<void>) {
   const home = await fs.mkdtemp(join(tmpdir(), "ourgroceries-mcp-cli-"));
@@ -64,6 +73,13 @@ async function runCli(args: string[], env: NodeJS.ProcessEnv): Promise<CliResult
     });
   });
 }
+
+test("CLI reports the package version", async () => {
+  const result = await runCli(["--version"], {});
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout.trim(), await readPackageVersion());
+});
 
 test("logout removes the saved config file without modifying environment variables", async () => {
   await withTempCliHome(async ({ appData, configPath, home }) => {

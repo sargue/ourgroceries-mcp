@@ -9,6 +9,7 @@ import {
 
 import { OurGroceriesClient } from "./client.js";
 import type { OurGroceriesClientApi, OurGroceriesConfig } from "./client.js";
+import { VERSION } from "./version.js";
 
 export interface OurGroceriesServerOptions {
   client?: OurGroceriesClientApi;
@@ -22,7 +23,7 @@ export class OurGroceriesServer {
     this.server = new Server(
       {
         name: "ourgroceries-mcp",
-        version: "1.0.0",
+        version: VERSION,
       },
       {
         capabilities: {
