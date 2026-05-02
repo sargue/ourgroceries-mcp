@@ -20,6 +20,17 @@ function createJsonResponse(
   } as Response;
 }
 
+function createInvalidJsonResponse(): Response {
+  return {
+    json: async () => {
+      throw new SyntaxError("Unexpected token < in JSON");
+    },
+    ok: true,
+    status: 200,
+    statusText: "OK",
+  } as unknown as Response;
+}
+
 function createFetch(responses: Response[]) {
   const pendingResponses = [...responses];
   const calls: FetchCall[] = [];
@@ -166,5 +177,24 @@ test("client rejects non-OK OurGroceries responses", async () => {
     { fetchImpl }
   );
 
-  await assert.rejects(client.getLists(), /API request failed: 401 Unauthorized/);
+  await assert.rejects(
+    client.getLists(),
+    /OurGroceries rejected the configured credentials \(401 Unauthorized\).*npx ourgroceries-mcp login/
+  );
+});
+
+test("client gives credential guidance for unexpected non-JSON responses", async () => {
+  const { fetchImpl } = createFetch([createInvalidJsonResponse()]);
+  const client = new OurGroceriesClient(
+    {
+      authCookie: "auth-cookie-value",
+      teamId: "team-id-value",
+    },
+    { fetchImpl }
+  );
+
+  await assert.rejects(
+    client.getLists(),
+    /configured credentials may be invalid or expired.*OURGROCERIES_AUTH_COOKIE/
+  );
 });

@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
-import { getConfigPath, loadConfig, saveConfig } from "../src/config.js";
+import {
+  getConfigPath,
+  loadConfig,
+  loadConfigResult,
+  removeConfig,
+  saveConfig,
+} from "../src/config.js";
 import type { Config } from "../src/config.js";
 
 interface TempConfigHome {
@@ -84,5 +90,46 @@ test("loadConfig returns null for missing, malformed, or incomplete config", asy
     await fs.writeFile(configPath, JSON.stringify({ authCookie: "auth-cookie-value" }), "utf-8");
 
     assert.equal(await loadConfig(), null);
+  });
+});
+
+test("loadConfigResult reports why a config file is invalid", async () => {
+  await withTempConfigHome(async () => {
+    const configPath = getConfigPath();
+
+    await fs.mkdir(dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, "{not-json", "utf-8");
+
+    assert.deepEqual(await loadConfigResult(), {
+      path: configPath,
+      reason: "file is not valid JSON",
+      status: "invalid",
+    });
+
+    await fs.writeFile(configPath, JSON.stringify({ authCookie: "auth-cookie-value" }), "utf-8");
+
+    assert.deepEqual(await loadConfigResult(), {
+      path: configPath,
+      reason: "teamId must be a non-empty string",
+      status: "invalid",
+    });
+  });
+});
+
+test("removeConfig deletes saved credentials without failing when none exist", async () => {
+  await withTempConfigHome(async () => {
+    const config: Config = {
+      authCookie: "auth-cookie-value",
+      teamId: "team-id-value",
+    };
+
+    assert.equal(await removeConfig(), false);
+
+    await saveConfig(config);
+    assert.deepEqual(await loadConfig(), config);
+
+    assert.equal(await removeConfig(), true);
+    assert.equal(await loadConfig(), null);
+    assert.equal(await removeConfig(), false);
   });
 });

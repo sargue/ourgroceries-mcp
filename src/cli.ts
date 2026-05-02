@@ -3,9 +3,11 @@
 import { Command } from "commander";
 import prompts from "prompts";
 import { login } from "./auth.js";
-import { saveConfig, getConfigPath, loadConfig } from "./config.js";
+import { saveConfig, getConfigPath, loadConfigResult, removeConfig } from "./config.js";
+import type { Config, ConfigLoadResult } from "./config.js";
 
 const program = new Command();
+const envCredentialNames = ["OURGROCERIES_AUTH_COOKIE", "OURGROCERIES_TEAM_ID"] as const;
 
 program.name("ourgroceries-mcp").description("OurGroceries MCP server").version("1.0.0");
 
@@ -69,31 +71,30 @@ program
     }
   });
 
+program
+  .command("logout")
+  .description("Remove saved OurGroceries credentials")
+  .action(async () => {
+    try {
+      const removed = await removeConfig();
+
+      if (removed) {
+        console.log(`Removed saved credentials from: ${getConfigPath()}`);
+      } else {
+        console.log(`No saved credentials found at: ${getConfigPath()}`);
+      }
+
+      console.log("Environment variables are not modified by logout.");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`\n✗ Logout failed: ${errorMessage}`);
+      process.exit(1);
+    }
+  });
+
 // Default action (when no command specified) - start the server
 program.action(async () => {
-  // Try to load config from file first
-  let config = await loadConfig();
-
-  // Fall back to environment variables if config file doesn't exist
-  if (!config) {
-    const authCookie = process.env.OURGROCERIES_AUTH_COOKIE;
-    const teamId = process.env.OURGROCERIES_TEAM_ID;
-
-    if (authCookie && teamId) {
-      config = { authCookie, teamId };
-    }
-  }
-
-  // If no config found, provide helpful error message
-  if (!config) {
-    console.error("Error: No OurGroceries credentials found.\n");
-    console.error("Please run: npx ourgroceries-mcp login\n");
-    console.error("Or set environment variables:");
-    console.error("  - OURGROCERIES_AUTH_COOKIE");
-    console.error("  - OURGROCERIES_TEAM_ID\n");
-    console.error(`Config file location: ${getConfigPath()}`);
-    process.exit(1);
-  }
+  const config = await loadCredentials();
 
   // Start the server (imported dynamically to avoid circular deps)
   const { OurGroceriesServer } = await import("./index.js");
@@ -102,3 +103,72 @@ program.action(async () => {
 });
 
 program.parse();
+
+type EnvCredentialResult =
+  | { config: Config; status: "loaded" }
+  | { missingVars: Array<(typeof envCredentialNames)[number]>; status: "missing" };
+
+async function loadCredentials(): Promise<Config> {
+  const configResult = await loadConfigResult();
+
+  if (configResult.status === "loaded") {
+    return configResult.config;
+  }
+
+  const envResult = loadCredentialsFromEnv();
+  if (envResult.status === "loaded") {
+    if (configResult.status === "invalid") {
+      console.error(
+        `Warning: Ignoring invalid config file at ${configResult.path}: ${configResult.reason}`
+      );
+    }
+
+    return envResult.config;
+  }
+
+  printCredentialError(configResult, envResult);
+  process.exit(1);
+}
+
+function loadCredentialsFromEnv(): EnvCredentialResult {
+  const missingVars = envCredentialNames.filter((name) => !process.env[name]?.trim());
+
+  if (missingVars.length > 0) {
+    return { missingVars, status: "missing" };
+  }
+
+  return {
+    config: {
+      authCookie: process.env.OURGROCERIES_AUTH_COOKIE as string,
+      teamId: process.env.OURGROCERIES_TEAM_ID as string,
+    },
+    status: "loaded",
+  };
+}
+
+function printCredentialError(
+  configResult: Exclude<ConfigLoadResult, { status: "loaded" }>,
+  envResult: Extract<EnvCredentialResult, { status: "missing" }>
+) {
+  console.error("Error: No usable OurGroceries credentials found.\n");
+
+  if (configResult.status === "invalid") {
+    console.error(`Config file is invalid: ${configResult.path}`);
+    console.error(`Reason: ${configResult.reason}\n`);
+  } else {
+    console.error(`No config file found at: ${configResult.path}\n`);
+  }
+
+  console.error("Environment-variable fallback is incomplete.");
+  console.error("Missing:");
+  for (const name of envResult.missingVars) {
+    console.error(`  - ${name}`);
+  }
+
+  console.error("\nFix by running:");
+  console.error("  npx ourgroceries-mcp login");
+  console.error("\nOr set both environment variables:");
+  for (const name of envCredentialNames) {
+    console.error(`  - ${name}`);
+  }
+}

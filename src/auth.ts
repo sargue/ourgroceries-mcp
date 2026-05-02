@@ -19,8 +19,8 @@ export async function login(
 
   if (debug) {
     console.error(`[DEBUG] Sending POST to ${SIGN_IN_URL}`);
-    console.error(`[DEBUG] Email: ${email}`);
-    console.error(`[DEBUG] Form data: ${formData.toString()}`);
+    console.error(`[DEBUG] Email: ${redactEmail(email)}`);
+    console.error(`[DEBUG] Form data: ${redactFormData(formData)}`);
   }
 
   const signInResponse = await fetch(SIGN_IN_URL, {
@@ -34,10 +34,7 @@ export async function login(
 
   if (debug) {
     console.error(`[DEBUG] Response status: ${signInResponse.status}`);
-    console.error(
-      `[DEBUG] Response headers:`,
-      Object.fromEntries(signInResponse.headers.entries())
-    );
+    console.error(`[DEBUG] Response headers:`, redactHeaders(signInResponse.headers));
   }
 
   // Step 2: Extract ourgroceries-auth cookie from response
@@ -49,7 +46,7 @@ export async function login(
   if (debug) {
     console.error(`[DEBUG] Set-Cookie headers (getSetCookie): ${setCookieHeaders.length}`);
     setCookieHeaders.forEach((cookie, i) => {
-      console.error(`[DEBUG]   Cookie ${i}: ${cookie.substring(0, 100)}...`);
+      console.error(`[DEBUG]   Cookie ${i}: ${redactCookieHeader(cookie)}`);
     });
   }
 
@@ -75,7 +72,7 @@ export async function login(
     if (match) {
       authCookie = match[1];
       if (debug) {
-        console.error(`[DEBUG] Found auth cookie: ${authCookie.substring(0, 20)}...`);
+        console.error(`[DEBUG] Found auth cookie in response`);
       }
       break;
     }
@@ -112,4 +109,42 @@ export async function login(
     authCookie,
     teamId,
   };
+}
+
+function redactEmail(email: string): string {
+  return email ? "[redacted]" : "";
+}
+
+function redactFormData(formData: URLSearchParams): string {
+  const redacted = new URLSearchParams(formData);
+
+  for (const key of ["emailAddress", "password"]) {
+    if (redacted.has(key)) {
+      redacted.set(key, "[redacted]");
+    }
+  }
+
+  return redacted.toString();
+}
+
+function redactHeaders(headers: Headers): Record<string, string> {
+  const sensitiveHeaders = new Set([
+    "authorization",
+    "cookie",
+    "proxy-authorization",
+    "set-cookie",
+  ]);
+
+  return Object.fromEntries(
+    [...headers.entries()].map(([name, value]) => [
+      name,
+      sensitiveHeaders.has(name.toLowerCase()) ? "[redacted]" : value,
+    ])
+  );
+}
+
+function redactCookieHeader(cookie: string): string {
+  const match = cookie.match(/^\s*([^=;]+)=/);
+
+  return match ? `${match[1]}=[redacted]` : "[redacted-cookie]";
 }

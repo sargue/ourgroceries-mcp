@@ -1,4 +1,6 @@
 export const OURGROCERIES_API_URL = "https://www.ourgroceries.com/your-lists";
+const CREDENTIALS_HELP =
+  'Run "npx ourgroceries-mcp login" again, then restart your MCP client. If you use environment variables, refresh OURGROCERIES_AUTH_COOKIE and OURGROCERIES_TEAM_ID.';
 
 export interface OurGroceriesConfig {
   authCookie: string;
@@ -128,11 +130,29 @@ export class OurGroceriesClient implements OurGroceriesClientApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(
+          `OurGroceries rejected the configured credentials (${formatResponseStatus(response)}). ${CREDENTIALS_HELP}`
+        );
+      }
+
       throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
 
-    return await response.json();
+    try {
+      return await response.json();
+    } catch {
+      throw new Error(
+        `OurGroceries returned an unexpected response. The configured credentials may be invalid or expired. ${CREDENTIALS_HELP}`
+      );
+    }
   }
+}
+
+function formatResponseStatus(response: Response): string {
+  return response.statusText
+    ? `${response.status} ${response.statusText}`
+    : String(response.status);
 }
 
 function getDefaultFetch(): typeof fetch {

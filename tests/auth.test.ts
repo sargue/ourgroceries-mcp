@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { inspect } from "node:util";
 
 import { login } from "../src/auth.js";
 
@@ -46,6 +47,21 @@ async function withMockedFetch(responses: Response[], run: (calls: FetchCall[]) 
     await run(calls);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+}
+
+async function withCapturedConsoleError(run: (logs: string[]) => Promise<void>) {
+  const originalError = console.error;
+  const logs: string[] = [];
+
+  console.error = (...args: unknown[]) => {
+    logs.push(args.map((arg) => (typeof arg === "string" ? arg : inspect(arg))).join(" "));
+  };
+
+  try {
+    await run(logs);
+  } finally {
+    console.error = originalError;
   }
 }
 
@@ -185,4 +201,34 @@ test("login rejects lists pages without a team ID", async () => {
     ),
     /Could not extract team ID/
   );
+});
+
+test("login debug output redacts credentials and cookie values", async () => {
+  await withCapturedConsoleError(async (logs) => {
+    await withMockedFetch(
+      [
+        createResponse({
+          setCookieHeader: "session=session-token-value; Path=/",
+          setCookieHeaders: ["ourgroceries-auth=auth-token-value; Path=/; HttpOnly"],
+        }),
+        createResponse({
+          text: 'g_teamId = "team-id-value";',
+        }),
+      ],
+      async () => {
+        await login("person@example.com", "secret-password", true);
+      }
+    );
+
+    const output = logs.join("\n");
+
+    assert.match(output, /Email: \[redacted\]/);
+    assert.match(output, /password=%5Bredacted%5D/);
+    assert.match(output, /set-cookie.*\[redacted\]/);
+    assert.match(output, /ourgroceries-auth=\[redacted\]/);
+    assert.doesNotMatch(output, /person@example\.com/);
+    assert.doesNotMatch(output, /secret-password/);
+    assert.doesNotMatch(output, /auth-token-value/);
+    assert.doesNotMatch(output, /session-token-value/);
+  });
 });
