@@ -1,26 +1,24 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 
-// Use native fetch if available (Node 18+), otherwise use node-fetch
-const fetchImpl = globalThis.fetch || (await import("node-fetch")).default;
+import { OurGroceriesClient } from "./client.js";
+import type { OurGroceriesClientApi, OurGroceriesConfig } from "./client.js";
 
-const API_URL = "https://www.ourgroceries.com/your-lists";
-
-interface OurGroceriesConfig {
-  authCookie: string;
-  teamId: string;
+export interface OurGroceriesServerOptions {
+  client?: OurGroceriesClientApi;
 }
 
 export class OurGroceriesServer {
+  private client: OurGroceriesClientApi;
   private server: Server;
-  private config: OurGroceriesConfig;
 
-  constructor(config: OurGroceriesConfig) {
+  constructor(config: OurGroceriesConfig, options: OurGroceriesServerOptions = {}) {
     this.server = new Server(
       {
         name: "ourgroceries-mcp",
@@ -33,30 +31,8 @@ export class OurGroceriesServer {
       }
     );
 
-    this.config = config;
+    this.client = options.client ?? new OurGroceriesClient(config);
     this.setupHandlers();
-  }
-
-  private async makeRequest(command: Record<string, unknown>): Promise<unknown> {
-    const response = await fetchImpl(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json; charset=UTF-8",
-        Cookie: `ourgroceries-auth=${this.config.authCookie}`,
-      },
-      body: JSON.stringify({
-        ...command,
-        teamId: this.config.teamId,
-        shareId: null,
-        locale: "en-US",
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-    }
-
-    return await response.json();
   }
 
   private setupHandlers() {
@@ -179,10 +155,7 @@ export class OurGroceriesServer {
       try {
         switch (request.params.name) {
           case "get_lists": {
-            const result = await this.makeRequest({
-              command: "getLists",
-              knownLists: [],
-            });
+            const result = await this.client.getLists();
 
             return {
               content: [
@@ -205,12 +178,10 @@ export class OurGroceriesServer {
               note?: string;
             };
 
-            await this.makeRequest({
-              command: "insertItem",
+            await this.client.addItem({
               listId,
               value,
               note,
-              isFromRecipe: false,
             });
 
             return {
@@ -229,8 +200,7 @@ export class OurGroceriesServer {
               itemId: string;
             };
 
-            await this.makeRequest({
-              command: "deleteItem",
+            await this.client.removeItem({
               listId,
               itemId,
             });
@@ -262,14 +232,12 @@ export class OurGroceriesServer {
               star?: number;
             };
 
-            await this.makeRequest({
-              command: "changeItemValue",
+            await this.client.updateItem({
               listId,
               itemId,
               newValue,
               categoryId,
               note,
-              photoId: "",
               star,
             });
 
@@ -290,8 +258,7 @@ export class OurGroceriesServer {
               crossedOff: boolean;
             };
 
-            await this.makeRequest({
-              command: "setItemCrossedOff",
+            await this.client.toggleItem({
               listId,
               itemId,
               crossedOff,
@@ -325,9 +292,13 @@ export class OurGroceriesServer {
     });
   }
 
+  async connect(transport: Transport) {
+    await this.server.connect(transport);
+  }
+
   async run() {
     const transport = new StdioServerTransport();
-    await this.server.connect(transport);
+    await this.connect(transport);
     console.error("OurGroceries MCP server running on stdio");
   }
 }
