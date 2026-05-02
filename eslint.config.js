@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["build/**", "coverage/**", "node_modules/**"],
+    ignores: ["build/**", "build-test/**", "coverage/**", "node_modules/**"],
   },
   {
     languageOptions: {
