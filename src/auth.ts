@@ -34,7 +34,10 @@ export async function login(
 
   if (debug) {
     console.error(`[DEBUG] Response status: ${signInResponse.status}`);
-    console.error(`[DEBUG] Response headers:`, Object.fromEntries(signInResponse.headers.entries()));
+    console.error(
+      `[DEBUG] Response headers:`,
+      Object.fromEntries(signInResponse.headers.entries())
+    );
   }
 
   // Step 2: Extract ourgroceries-auth cookie from response
@@ -54,7 +57,7 @@ export async function login(
     // Fallback: try regular get
     const setCookieHeader = signInResponse.headers.get("set-cookie");
     if (debug) {
-      console.error(`[DEBUG] Set-Cookie header (get): ${setCookieHeader ? 'present' : 'null'}`);
+      console.error(`[DEBUG] Set-Cookie header (get): ${setCookieHeader ? "present" : "null"}`);
     }
     if (setCookieHeader) {
       setCookieHeaders.push(setCookieHeader);
@@ -100,9 +103,7 @@ export async function login(
   // Step 4: Parse team ID from HTML using regex
   const teamIdMatch = htmlContent.match(/g_teamId = "([^"]+)"/);
   if (!teamIdMatch) {
-    throw new Error(
-      "Could not extract team ID from response. The page format may have changed."
-    );
+    throw new Error("Could not extract team ID from response. The page format may have changed.");
   }
 
   const teamId = teamIdMatch[1];

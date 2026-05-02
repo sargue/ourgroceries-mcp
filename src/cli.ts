@@ -4,33 +4,10 @@ import { Command } from "commander";
 import prompts from "prompts";
 import { login } from "./auth.js";
 import { saveConfig, getConfigPath, loadConfig } from "./config.js";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  Tool,
-} from "@modelcontextprotocol/sdk/types.js";
-
-const API_URL = "https://www.ourgroceries.com/your-lists";
-
-interface OurGroceriesConfig {
-  authCookie: string;
-  teamId: string;
-}
-
-async function startServer(config: OurGroceriesConfig) {
-  const { OurGroceriesServer } = await import("./index.js");
-  const server = new OurGroceriesServer(config);
-  await server.run();
-}
 
 const program = new Command();
 
-program
-  .name("ourgroceries-mcp")
-  .description("OurGroceries MCP server")
-  .version("1.0.0");
+program.name("ourgroceries-mcp").description("OurGroceries MCP server").version("1.0.0");
 
 program
   .command("login")
@@ -53,15 +30,13 @@ program
             name: "email",
             message: "Email:",
             initial: email,
-            validate: (value) =>
-              value.includes("@") ? true : "Please enter a valid email",
+            validate: (value) => (value.includes("@") ? true : "Please enter a valid email"),
           },
           {
             type: "password",
             name: "password",
             message: "Password:",
-            validate: (value) =>
-              value.length > 0 ? true : "Password cannot be empty",
+            validate: (value) => (value.length > 0 ? true : "Password cannot be empty"),
           },
         ]);
 
@@ -77,19 +52,13 @@ program
 
       console.log("\nAuthenticating...");
 
-      const { authCookie, teamId } = await login(
-        email,
-        password,
-        options.debug
-      );
+      const { authCookie, teamId } = await login(email, password, options.debug);
 
       await saveConfig({ authCookie, teamId });
 
       console.log(`\n✓ Successfully logged in!`);
       console.log(`\nCredentials saved to: ${getConfigPath()}`);
-      console.log(
-        "\nYou can now use the OurGroceries MCP server without environment variables."
-      );
+      console.log("\nYou can now use the OurGroceries MCP server without environment variables.");
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`\n✗ Login failed: ${errorMessage}`);

@@ -50,7 +50,7 @@ export async function loadConfig(): Promise<Config | null> {
     }
 
     return config;
-  } catch (error) {
+  } catch {
     // File doesn't exist or is invalid
     return null;
   }

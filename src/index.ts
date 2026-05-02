@@ -37,7 +37,7 @@ export class OurGroceriesServer {
     this.setupHandlers();
   }
 
-  private async makeRequest(command: Record<string, any>): Promise<any> {
+  private async makeRequest(command: Record<string, unknown>): Promise<unknown> {
     const response = await fetchImpl(API_URL, {
       method: "POST",
       headers: {
@@ -74,8 +74,7 @@ export class OurGroceriesServer {
           },
           {
             name: "add_item",
-            description:
-              "Add a new item to a grocery list. You can optionally add a note.",
+            description: "Add a new item to a grocery list. You can optionally add a note.",
             inputSchema: {
               type: "object",
               properties: {
@@ -116,8 +115,7 @@ export class OurGroceriesServer {
           },
           {
             name: "update_item",
-            description:
-              "Update an item's details (name, category, note, or star rating)",
+            description: "Update an item's details (name, category, note, or star rating)",
             inputSchema: {
               type: "object",
               properties: {
@@ -197,13 +195,17 @@ export class OurGroceriesServer {
           }
 
           case "add_item": {
-            const { listId, value, note = "" } = request.params.arguments as {
+            const {
+              listId,
+              value,
+              note = "",
+            } = request.params.arguments as {
               listId: string;
               value: string;
               note?: string;
             };
 
-            const result = await this.makeRequest({
+            await this.makeRequest({
               command: "insertItem",
               listId,
               value,
@@ -227,7 +229,7 @@ export class OurGroceriesServer {
               itemId: string;
             };
 
-            const result = await this.makeRequest({
+            await this.makeRequest({
               command: "deleteItem",
               listId,
               itemId,
@@ -260,7 +262,7 @@ export class OurGroceriesServer {
               star?: number;
             };
 
-            const result = await this.makeRequest({
+            await this.makeRequest({
               command: "changeItemValue",
               listId,
               itemId,
@@ -288,7 +290,7 @@ export class OurGroceriesServer {
               crossedOff: boolean;
             };
 
-            const result = await this.makeRequest({
+            await this.makeRequest({
               command: "setItemCrossedOff",
               listId,
               itemId,

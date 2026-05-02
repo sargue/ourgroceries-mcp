@@ -14,16 +14,20 @@
   ],
   "scripts": {
     "build": "tsc",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run build && npm run lint && npm run format:check",
     "prepare": "npm run build",
     "watch": "tsc --watch"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/justincampbell/ourgroceries-mcp.git"
+    "url": "git+https://github.com/sargue/ourgroceries-mcp.git"
   },
-  "homepage": "https://github.com/justincampbell/ourgroceries-mcp#readme",
+  "homepage": "https://github.com/sargue/ourgroceries-mcp#readme",
   "bugs": {
-    "url": "https://github.com/justincampbell/ourgroceries-mcp/issues"
+    "url": "https://github.com/sargue/ourgroceries-mcp/issues"
   },
   "keywords": [
     "ourgroceries",
@@ -32,7 +36,13 @@
     "model-context-protocol"
   ],
   "author": "Justin Campbell <justin@justincampbell.me>",
+  "contributors": [
+    "Sergi Baila <sergibaila@protonmail.com>"
+  ],
   "license": "MIT",
+  "engines": {
+    "node": "^22.13.0 || >=24.0.0"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
     "commander": "^12.0.0",
@@ -40,8 +50,13 @@
     "prompts": "^2.4.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.2",
     "@types/prompts": "^2.4.9",
-    "typescript": "^5.7.2"
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.3",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.59.1"
   }
 }
