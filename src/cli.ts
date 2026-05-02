@@ -1,113 +1,337 @@
 #!/usr/bin/env node
 
-import { Command } from "commander";
+import { realpathSync } from "fs";
+import { fileURLToPath } from "url";
+import { Command, CommanderError, InvalidArgumentError } from "commander";
 import prompts from "prompts";
 import { login } from "./auth.js";
+import { OurGroceriesClient } from "./client.js";
+import type { OurGroceriesClientApi } from "./client.js";
 import { saveConfig, getConfigPath, loadConfigResult, removeConfig } from "./config.js";
 import type { Config, ConfigLoadResult } from "./config.js";
 import { VERSION } from "./version.js";
 
-const program = new Command();
 const envCredentialNames = ["OURGROCERIES_AUTH_COOKIE", "OURGROCERIES_TEAM_ID"] as const;
 
-program.name("ourgroceries-mcp").description("OurGroceries MCP server").version(VERSION);
+export interface CliProgramOptions {
+  clientFactory?: (config: Config) => OurGroceriesClientApi;
+  runServer?: (config: Config) => Promise<void>;
+  stderr?: (message: string) => void;
+  stdout?: (message: string) => void;
+}
 
-program
-  .command("login")
-  .description("Log in to OurGroceries and save credentials")
-  .option("-e, --email <email>", "Email address")
-  .option("-p, --password <password>", "Password")
-  .option("-d, --debug", "Enable debug logging")
-  .action(async (options) => {
-    try {
-      console.log("OurGroceries Login\n");
+interface CliRuntime {
+  clientFactory: (config: Config) => OurGroceriesClientApi;
+  runServer: (config: Config) => Promise<void>;
+  stderr: (message: string) => void;
+  stdout: (message: string) => void;
+}
 
-      let email = options.email;
-      let password = options.password;
+export function createProgram(options: CliProgramOptions = {}): Command {
+  const runtime = createRuntime(options);
+  const program = new Command();
 
-      // If credentials not provided as arguments, prompt for them
-      if (!email || !password) {
-        const response = await prompts([
-          {
-            type: "text",
-            name: "email",
-            message: "Email:",
-            initial: email,
-            validate: (value) => (value.includes("@") ? true : "Please enter a valid email"),
-          },
-          {
-            type: "password",
-            name: "password",
-            message: "Password:",
-            validate: (value) => (value.length > 0 ? true : "Password cannot be empty"),
-          },
-        ]);
+  program.configureOutput({
+    writeErr: runtime.stderr,
+    writeOut: runtime.stdout,
+  });
+  program.name("ourgroceries-mcp").description("OurGroceries MCP server").version(VERSION);
 
-        // Check if user cancelled (Ctrl+C)
-        if (!response.email || !response.password) {
-          console.log("\nLogin cancelled");
-          process.exit(0);
+  program
+    .command("login")
+    .description("Log in to OurGroceries and save credentials")
+    .option("-e, --email <email>", "Email address")
+    .option("-p, --password <password>", "Password")
+    .option("-d, --debug", "Enable debug logging")
+    .action(async (options) => {
+      try {
+        console.log("OurGroceries Login\n");
+
+        let email = options.email;
+        let password = options.password;
+
+        // If credentials not provided as arguments, prompt for them
+        if (!email || !password) {
+          const response = await prompts([
+            {
+              type: "text",
+              name: "email",
+              message: "Email:",
+              initial: email,
+              validate: (value) => (value.includes("@") ? true : "Please enter a valid email"),
+            },
+            {
+              type: "password",
+              name: "password",
+              message: "Password:",
+              validate: (value) => (value.length > 0 ? true : "Password cannot be empty"),
+            },
+          ]);
+
+          // Check if user cancelled (Ctrl+C)
+          if (!response.email || !response.password) {
+            console.log("\nLogin cancelled");
+            process.exit(0);
+          }
+
+          email = response.email;
+          password = response.password;
         }
 
-        email = response.email;
-        password = response.password;
+        console.log("\nAuthenticating...");
+
+        const { authCookie, teamId } = await login(email, password, options.debug);
+
+        await saveConfig({ authCookie, teamId });
+
+        console.log(`\n✓ Successfully logged in!`);
+        console.log(`\nCredentials saved to: ${getConfigPath()}`);
+        console.log("\nYou can now use the OurGroceries MCP server without environment variables.");
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`\n✗ Login failed: ${errorMessage}`);
+        if (options.debug && error instanceof Error && error.stack) {
+          console.error("\nStack trace:", error.stack);
+        }
+        process.exit(1);
       }
+    });
 
-      console.log("\nAuthenticating...");
+  program
+    .command("logout")
+    .description("Remove saved OurGroceries credentials")
+    .action(async () => {
+      try {
+        const removed = await removeConfig();
 
-      const { authCookie, teamId } = await login(email, password, options.debug);
+        if (removed) {
+          console.log(`Removed saved credentials from: ${getConfigPath()}`);
+        } else {
+          console.log(`No saved credentials found at: ${getConfigPath()}`);
+        }
 
-      await saveConfig({ authCookie, teamId });
-
-      console.log(`\n✓ Successfully logged in!`);
-      console.log(`\nCredentials saved to: ${getConfigPath()}`);
-      console.log("\nYou can now use the OurGroceries MCP server without environment variables.");
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`\n✗ Login failed: ${errorMessage}`);
-      if (options.debug && error instanceof Error && error.stack) {
-        console.error("\nStack trace:", error.stack);
+        console.log("Environment variables are not modified by logout.");
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`\n✗ Logout failed: ${errorMessage}`);
+        process.exit(1);
       }
-      process.exit(1);
-    }
+    });
+
+  program
+    .command("get-lists")
+    .description("Get all grocery lists with their items")
+    .action(async () => {
+      await runOperationalCommand("get-lists", runtime, async (client) => {
+        writeJson(runtime, await client.getLists());
+      });
+    });
+
+  program
+    .command("add-item")
+    .description("Add a new item to a grocery list")
+    .requiredOption("--list-id <listId>", "The ID of the list to add the item to")
+    .requiredOption("--value <value>", "The name/value of the item to add")
+    .option("--note <note>", "Optional note for the item")
+    .action(async (options: AddItemOptions) => {
+      await runOperationalCommand("add-item", runtime, async (client) => {
+        const note = options.note ?? "";
+
+        await client.addItem({
+          listId: options.listId,
+          value: options.value,
+          note,
+        });
+
+        writeJson(runtime, {
+          ok: true,
+          operation: "add_item",
+          listId: options.listId,
+          value: options.value,
+          note,
+        });
+      });
+    });
+
+  program
+    .command("remove-item")
+    .description("Remove an item from a grocery list")
+    .requiredOption("--list-id <listId>", "The ID of the list containing the item")
+    .requiredOption("--item-id <itemId>", "The ID of the item to remove")
+    .action(async (options: RemoveItemOptions) => {
+      await runOperationalCommand("remove-item", runtime, async (client) => {
+        await client.removeItem({
+          listId: options.listId,
+          itemId: options.itemId,
+        });
+
+        writeJson(runtime, {
+          ok: true,
+          operation: "remove_item",
+          listId: options.listId,
+          itemId: options.itemId,
+        });
+      });
+    });
+
+  program
+    .command("update-item")
+    .description("Update an item's details")
+    .requiredOption("--list-id <listId>", "The ID of the list containing the item")
+    .requiredOption("--item-id <itemId>", "The ID of the item to update")
+    .requiredOption("--new-value <newValue>", "The new name/value for the item")
+    .option("--category-id <categoryId>", "Optional category ID")
+    .option("--note <note>", "Optional note")
+    .option("--star <star>", "Star rating (0 or 1)", parseStarOption, 0)
+    .action(async (options: UpdateItemOptions) => {
+      await runOperationalCommand("update-item", runtime, async (client) => {
+        const categoryId = options.categoryId ?? null;
+        const note = options.note ?? "";
+        const star = options.star ?? 0;
+
+        await client.updateItem({
+          listId: options.listId,
+          itemId: options.itemId,
+          newValue: options.newValue,
+          categoryId,
+          note,
+          star,
+        });
+
+        writeJson(runtime, {
+          ok: true,
+          operation: "update_item",
+          listId: options.listId,
+          itemId: options.itemId,
+          newValue: options.newValue,
+          categoryId,
+          note,
+          star,
+        });
+      });
+    });
+
+  program
+    .command("toggle-item")
+    .description("Mark an item as crossed off or uncrossed")
+    .requiredOption("--list-id <listId>", "The ID of the list containing the item")
+    .requiredOption("--item-id <itemId>", "The ID of the item to toggle")
+    .option("--crossed-off", "Mark the item crossed off")
+    .option("--uncrossed", "Mark the item uncrossed")
+    .action(async (options: ToggleItemOptions) => {
+      const crossedOff = parseToggleCrossedOff(options, runtime);
+
+      await runOperationalCommand("toggle-item", runtime, async (client) => {
+        await client.toggleItem({
+          listId: options.listId,
+          itemId: options.itemId,
+          crossedOff,
+        });
+
+        writeJson(runtime, {
+          ok: true,
+          operation: "toggle_item",
+          listId: options.listId,
+          itemId: options.itemId,
+          crossedOff,
+        });
+      });
+    });
+
+  // Default action (when no command specified) - start the server
+  program.action(async () => {
+    await runtime.runServer(await loadCredentials());
   });
 
-program
-  .command("logout")
-  .description("Remove saved OurGroceries credentials")
-  .action(async () => {
-    try {
-      const removed = await removeConfig();
+  return program;
+}
 
-      if (removed) {
-        console.log(`Removed saved credentials from: ${getConfigPath()}`);
-      } else {
-        console.log(`No saved credentials found at: ${getConfigPath()}`);
-      }
+interface AddItemOptions {
+  listId: string;
+  note?: string;
+  value: string;
+}
 
-      console.log("Environment variables are not modified by logout.");
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`\n✗ Logout failed: ${errorMessage}`);
-      process.exit(1);
-    }
-  });
+interface RemoveItemOptions {
+  itemId: string;
+  listId: string;
+}
 
-// Default action (when no command specified) - start the server
-program.action(async () => {
-  const config = await loadCredentials();
+interface UpdateItemOptions {
+  categoryId?: string;
+  itemId: string;
+  listId: string;
+  newValue: string;
+  note?: string;
+  star?: number;
+}
 
-  // Start the server (imported dynamically to avoid circular deps)
-  const { OurGroceriesServer } = await import("./index.js");
-  const server = new OurGroceriesServer(config);
-  await server.run();
-});
-
-program.parse();
+interface ToggleItemOptions {
+  crossedOff?: boolean;
+  itemId: string;
+  listId: string;
+  uncrossed?: boolean;
+}
 
 type EnvCredentialResult =
   | { config: Config; status: "loaded" }
   | { missingVars: Array<(typeof envCredentialNames)[number]>; status: "missing" };
+
+async function runOperationalCommand(
+  commandName: string,
+  runtime: CliRuntime,
+  run: (client: OurGroceriesClientApi) => Promise<void>
+) {
+  try {
+    await run(runtime.clientFactory(await loadCredentials()));
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    runtime.stderr(`Error: ${commandName} failed: ${errorMessage}\n`);
+    throw new CommanderError(1, `${commandName}.failed`, errorMessage);
+  }
+}
+
+function createOurGroceriesClient(config: Config): OurGroceriesClientApi {
+  return new OurGroceriesClient(config);
+}
+
+function createRuntime(options: CliProgramOptions): CliRuntime {
+  return {
+    clientFactory: options.clientFactory ?? createOurGroceriesClient,
+    runServer: options.runServer ?? runMcpServer,
+    stderr: options.stderr ?? ((message) => process.stderr.write(message)),
+    stdout: options.stdout ?? ((message) => process.stdout.write(message)),
+  };
+}
+
+async function runMcpServer(config: Config): Promise<void> {
+  // Imported dynamically to avoid circular deps.
+  const { OurGroceriesServer } = await import("./index.js");
+  const server = new OurGroceriesServer(config);
+  await server.run();
+}
+
+function parseStarOption(value: string): number {
+  if (value !== "0" && value !== "1") {
+    throw new InvalidArgumentError("must be 0 or 1");
+  }
+
+  return Number(value);
+}
+
+function parseToggleCrossedOff(options: ToggleItemOptions, runtime: CliRuntime): boolean {
+  if (Boolean(options.crossedOff) === Boolean(options.uncrossed)) {
+    const message = "toggle-item requires exactly one of --crossed-off or --uncrossed";
+    runtime.stderr(`Error: ${message}\n`);
+    throw new CommanderError(1, "toggle-item.invalidToggle", message);
+  }
+
+  return Boolean(options.crossedOff);
+}
+
+function writeJson(runtime: CliRuntime, value: unknown) {
+  runtime.stdout(`${JSON.stringify(value, null, 2)}\n`);
+}
 
 async function loadCredentials(): Promise<Config> {
   const configResult = await loadConfigResult();
@@ -172,4 +396,33 @@ function printCredentialError(
   for (const name of envCredentialNames) {
     console.error(`  - ${name}`);
   }
+}
+
+function isMainModule(): boolean {
+  const entryPoint = process.argv[1];
+  if (!entryPoint) {
+    return false;
+  }
+
+  const currentModule = fileURLToPath(import.meta.url);
+
+  try {
+    return realpathSync(entryPoint) === realpathSync(currentModule);
+  } catch {
+    return entryPoint === currentModule;
+  }
+}
+
+function handleTopLevelCliError(error: unknown): never {
+  if (error instanceof CommanderError) {
+    process.exit(error.exitCode);
+  }
+
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  console.error(`Error: ${errorMessage}`);
+  process.exit(1);
+}
+
+if (isMainModule()) {
+  await createProgram().parseAsync().catch(handleTopLevelCliError);
 }

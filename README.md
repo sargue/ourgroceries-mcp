@@ -115,3 +115,49 @@ Once configured, you can ask Claude:
 ## License
 
 MIT
+
+## Developer CLI Usage
+
+Build first, then run the local binary directly:
+
+```bash
+npm ci
+npm run build
+node build/cli.js
+```
+
+Running `node build/cli.js` with no subcommand starts the MCP server over stdio, matching the
+published `ourgroceries-mcp` binary behavior.
+
+For local CLI testing with your own OurGroceries account, authenticate once:
+
+```bash
+node build/cli.js login
+```
+
+The CLI uses the same credentials as MCP mode: saved config file first, then the
+`OURGROCERIES_AUTH_COOKIE` and `OURGROCERIES_TEAM_ID` environment-variable fallback. `logout`
+removes only the saved config file:
+
+```bash
+node build/cli.js logout
+```
+
+Operational commands print JSON on success and write errors to stderr with a nonzero exit code.
+They use explicit IDs only; get list and item IDs from `get-lists` before mutating items:
+
+```bash
+node build/cli.js get-lists
+node build/cli.js add-item --list-id LIST_ID --value "milk" --note "2%"
+node build/cli.js remove-item --list-id LIST_ID --item-id ITEM_ID
+node build/cli.js update-item --list-id LIST_ID --item-id ITEM_ID --new-value "whole milk" --star 1
+node build/cli.js toggle-item --list-id LIST_ID --item-id ITEM_ID --crossed-off
+node build/cli.js toggle-item --list-id LIST_ID --item-id ITEM_ID --uncrossed
+```
+
+Before sending CLI changes, run:
+
+```bash
+npm run check
+npm audit --audit-level=moderate
+```
