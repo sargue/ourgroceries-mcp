@@ -102,6 +102,12 @@ Add to your configuration file:
 
 Then restart Claude Desktop.
 
+## Codex Skill
+
+This repository and npm package include a Codex skill at
+`skills/ourgroceries-cli`. Use `$ourgroceries-cli` when you want Codex to operate
+OurGroceries through the CLI instead of through MCP.
+
 ## Credentials
 
 By default, credentials are stored in a local config file:
