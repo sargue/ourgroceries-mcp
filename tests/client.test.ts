@@ -101,6 +101,7 @@ test("mutation methods construct the existing OurGroceries commands", async () =
     createJsonResponse({}),
     createJsonResponse({}),
     createJsonResponse({}),
+    createJsonResponse({}),
   ]);
   const client = new OurGroceriesClient(
     {
@@ -113,7 +114,8 @@ test("mutation methods construct the existing OurGroceries commands", async () =
   await client.addItem({ listId: "list-id", value: "milk" });
   await client.removeItem({ listId: "list-id", itemId: "item-id" });
   await client.updateItem({ listId: "list-id", itemId: "item-id", newValue: "whole milk" });
-  await client.toggleItem({ listId: "list-id", itemId: "item-id", crossedOff: true });
+  await client.crossOffItem({ listId: "list-id", itemId: "item-id" });
+  await client.uncrossItem({ listId: "list-id", itemId: "item-id" });
 
   assert.deepEqual(
     calls.map((call) => getJsonBody(call.init)),
@@ -154,6 +156,15 @@ test("mutation methods construct the existing OurGroceries commands", async () =
         listId: "list-id",
         itemId: "item-id",
         crossedOff: true,
+        teamId: "team-id-value",
+        shareId: null,
+        locale: "en-US",
+      },
+      {
+        command: "setItemCrossedOff",
+        listId: "list-id",
+        itemId: "item-id",
+        crossedOff: false,
         teamId: "team-id-value",
         shareId: null,
         locale: "en-US",

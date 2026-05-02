@@ -25,11 +25,17 @@ Tests live in `tests/` and compile to `build-test/`, which is ignored by Git.
 - `npm run watch`: run TypeScript in watch mode during local development.
 - `node build/cli.js login`: authenticate and write local credentials after building.
 - `node build/cli.js logout`: remove saved local credentials after building.
-- `node build/cli.js get-lists`: print raw list JSON using local credentials.
+- `node build/cli.js get-lists`: print visible shopping-list summaries without item arrays.
+- `node build/cli.js get-categories`: print item categories extracted from the hidden category list.
+- `node build/cli.js get-settings`: print account settings and list schema version.
+- `node build/cli.js get-active-items --list-id LIST_ID`: print active items for a shopping list.
+- `node build/cli.js get-crossed-off-items --list-id LIST_ID [--search TEXT] [--crossed-off-after DATE] [--crossed-off-before DATE] [--sort-by crossedOffAt|name] [--asc|--desc] [--limit N] [--offset N]`: print filtered crossed-off item history.
+- `node build/cli.js resolve-item-to-add --query TEXT [--list-id LIST_ID] [--limit N]`: resolve natural-language item text against the master catalog and shopping history.
 - `node build/cli.js add-item --list-id LIST_ID --value VALUE [--note NOTE]`: add an item and print JSON success.
 - `node build/cli.js remove-item --list-id LIST_ID --item-id ITEM_ID`: remove an item and print JSON success.
 - `node build/cli.js update-item --list-id LIST_ID --item-id ITEM_ID --new-value VALUE [--category-id CATEGORY_ID] [--note NOTE] [--star 0|1]`: update an item and print JSON success.
-- `node build/cli.js toggle-item --list-id LIST_ID --item-id ITEM_ID --crossed-off|--uncrossed`: toggle an item and print JSON success.
+- `node build/cli.js cross-off-item --list-id LIST_ID --item-id ITEM_ID`: cross off an item and print JSON success.
+- `node build/cli.js uncross-item --list-id LIST_ID --item-id ITEM_ID`: uncross an item and print JSON success.
 - `node build/cli.js`: after building and configuring credentials, start the MCP server over stdio.
 
 Before opening a PR, run `npm run check`. For dependency review, also run `npm audit --audit-level=moderate`.
@@ -37,6 +43,25 @@ Before opening a PR, run `npm run check`. For dependency review, also run `npm a
 ## Coding Style & Naming Conventions
 
 Use strict TypeScript with ES modules and explicit `.js` extensions in relative imports, matching `moduleResolution: "Node16"`. Follow the existing style: two-space indentation, double quotes, semicolons, `camelCase` for variables/functions, `PascalCase` for interfaces/classes, and comments only where behavior is non-obvious. Keep API command names, MCP tool names, CLI command names, and JSON success fields stable unless intentionally breaking.
+
+## OurGroceries Data Model Notes
+
+The upstream `getLists` command returns a mixed payload. Visible shopping lists have
+`listType: "SHOPPING"`. Hidden lists include the master item catalog with `listType: "MASTER"`
+and the category container with `listType: "CATEGORY"`. Active shopping-list items lack a
+`crossedOffAt` property. Crossed-off items have numeric `crossedOffAt` epoch milliseconds.
+
+Master item IDs do not match shopping-list item IDs. Item resolution joins master catalog entries
+and shopping-list history by exact `value`, preserving master frequency (`addedCount`) and recent
+shopping-list history. Use `resolve_item_to_add` before ambiguous add operations, then follow its
+`recommendedAction`: add a new item, uncross an existing crossed-off item, or do nothing when the
+item is already active.
+
+Developer references live in `docs/`:
+
+- `docs/data-model.md`: upstream payload structure and item status semantics.
+- `docs/operations.md`: MCP and CLI operation contracts.
+- `docs/item-resolution.md`: resolver merge, scoring, and action behavior.
 
 ## Testing Guidelines
 

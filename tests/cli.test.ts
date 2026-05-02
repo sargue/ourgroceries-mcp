@@ -8,9 +8,9 @@ import test from "node:test";
 
 import type {
   AddItemInput,
+  CrossOffItemInput,
   OurGroceriesClientApi,
   RemoveItemInput,
-  ToggleItemInput,
   UpdateItemInput,
 } from "../src/client.js";
 import { createProgram } from "../src/cli.js";
@@ -43,7 +43,8 @@ type MockClientCall =
   | { input: AddItemInput; method: "addItem" }
   | { input: RemoveItemInput; method: "removeItem" }
   | { input: UpdateItemInput; method: "updateItem" }
-  | { input: ToggleItemInput; method: "toggleItem" };
+  | { input: CrossOffItemInput; method: "crossOffItem" }
+  | { input: CrossOffItemInput; method: "uncrossItem" };
 
 const cliEnvNames = [
   "APPDATA",
@@ -54,12 +55,67 @@ const cliEnvNames = [
 ] as const;
 const cliPath = fileURLToPath(new URL("../src/cli.js", import.meta.url));
 const packageJsonPath = fileURLToPath(new URL("../../package.json", import.meta.url));
+const crossedOffAt = Date.UTC(2024, 0, 2);
+
+function createRawListsPayload() {
+  return {
+    listSchemaVersion: 6,
+    settings: {
+      showPhotos: true,
+    },
+    lists: [
+      {
+        id: "list-id",
+        name: "Groceries",
+        listType: "SHOPPING",
+        versionId: "version-1",
+        items: [
+          {
+            id: "active-id",
+            value: "Milk",
+            name: "Milk",
+          },
+          {
+            id: "crossed-id",
+            value: "Olivas",
+            name: "Olivas",
+            crossedOffAt,
+          },
+        ],
+      },
+      {
+        id: "master-list-id",
+        name: "All Items",
+        listType: "MASTER",
+        items: [
+          {
+            id: "master-olivas-id",
+            value: "Olivas",
+            name: "Olivas",
+            addedCount: 8,
+            lastAddedAt: crossedOffAt,
+          },
+        ],
+      },
+      {
+        id: "category-list-id",
+        name: "Categories",
+        listType: "CATEGORY",
+        items: [
+          {
+            id: "category-id",
+            value: "Produce",
+            name: "Produce",
+          },
+        ],
+      },
+    ],
+  };
+}
 
 class MockOurGroceriesClient implements OurGroceriesClientApi {
   calls: MockClientCall[] = [];
-  getListsResult: unknown = {
-    lists: [{ id: "list-id", name: "Groceries" }],
-  };
+  getListsResult: unknown = createRawListsPayload();
 
   async getLists(): Promise<unknown> {
     this.calls.push({ method: "getLists" });
@@ -79,8 +135,12 @@ class MockOurGroceriesClient implements OurGroceriesClientApi {
     this.calls.push({ input, method: "updateItem" });
   }
 
-  async toggleItem(input: ToggleItemInput): Promise<void> {
-    this.calls.push({ input, method: "toggleItem" });
+  async crossOffItem(input: CrossOffItemInput): Promise<void> {
+    this.calls.push({ input, method: "crossOffItem" });
+  }
+
+  async uncrossItem(input: CrossOffItemInput): Promise<void> {
+    this.calls.push({ input, method: "uncrossItem" });
   }
 }
 
@@ -309,7 +369,7 @@ test("CLI with no subcommand starts MCP stdio mode", async () => {
   });
 });
 
-test("get-lists prints raw JSON and uses environment credentials when no config exists", async () => {
+test("get-lists prints focused JSON and uses environment credentials when no config exists", async () => {
   await withTempCliHome(async ({ appData, home }) => {
     const client = new MockOurGroceriesClient();
     const result = await runCliProgram(
@@ -325,9 +385,16 @@ test("get-lists prints raw JSON and uses environment credentials when no config 
     );
 
     assert.equal(result.stderr, "");
-    assert.deepEqual(parseJson(result.stdout), {
-      lists: [{ id: "list-id", name: "Groceries" }],
-    });
+    assert.deepEqual(parseJson(result.stdout), [
+      {
+        id: "list-id",
+        name: "Groceries",
+        itemCount: 2,
+        activeItemCount: 1,
+        crossedOffItemCount: 1,
+        versionId: "version-1",
+      },
+    ]);
     assert.deepEqual(result.configs, [
       {
         authCookie: "env-auth-cookie-value",
@@ -361,7 +428,7 @@ test("operational commands prefer saved config credentials over environment cred
     );
 
     assert.equal(result.stderr, "");
-    assert.deepEqual(parseJson(result.stdout), { lists: [] });
+    assert.deepEqual(parseJson(result.stdout), []);
     assert.deepEqual(result.configs, [
       {
         authCookie: "config-auth-cookie-value",
@@ -369,6 +436,95 @@ test("operational commands prefer saved config credentials over environment cred
       },
     ]);
     assert.deepEqual(client.calls, [{ method: "getLists" }]);
+  });
+});
+
+test("read commands transform raw list data and print stable JSON", async () => {
+  await withTempCliHome(async ({ appData, configPath, home }) => {
+    await writeConfig(configPath, {
+      authCookie: "config-auth-cookie-value",
+      teamId: "config-team-id-value",
+    });
+
+    const client = new MockOurGroceriesClient();
+    const env = {
+      APPDATA: appData,
+      HOME: home,
+      USERPROFILE: home,
+    };
+
+    const categoriesResult = await runCliProgram(["get-categories"], env, client);
+    const settingsResult = await runCliProgram(["get-settings"], env, client);
+    const activeItemsResult = await runCliProgram(
+      ["get-active-items", "--list-id", "list-id"],
+      env,
+      client
+    );
+    const crossedOffItemsResult = await runCliProgram(
+      ["get-crossed-off-items", "--list-id", "list-id", "--search", "olí", "--limit", "1"],
+      env,
+      client
+    );
+    const resolverResult = await runCliProgram(
+      ["resolve-item-to-add", "--query", "añadir olivas", "--list-id", "list-id"],
+      env,
+      client
+    );
+
+    assert.equal(categoriesResult.stderr, "");
+    assert.deepEqual(parseJson(categoriesResult.stdout), [{ id: "category-id", value: "Produce" }]);
+
+    assert.equal(settingsResult.stderr, "");
+    assert.deepEqual(parseJson(settingsResult.stdout), {
+      settings: {
+        showPhotos: true,
+      },
+      listSchemaVersion: 6,
+    });
+
+    assert.equal(activeItemsResult.stderr, "");
+    assert.deepEqual(parseJson(activeItemsResult.stdout), [
+      { id: "active-id", value: "Milk", name: "Milk" },
+    ]);
+
+    assert.equal(crossedOffItemsResult.stderr, "");
+    assert.deepEqual(parseJson(crossedOffItemsResult.stdout), {
+      listId: "list-id",
+      items: [
+        {
+          id: "crossed-id",
+          value: "Olivas",
+          name: "Olivas",
+          crossedOffAt: {
+            epochMs: crossedOffAt,
+            iso: new Date(crossedOffAt).toISOString(),
+          },
+        },
+      ],
+      total: 1,
+      limit: 1,
+      offset: 0,
+      hasMore: false,
+    });
+
+    const parsedResolverResult = parseJson(resolverResult.stdout) as {
+      candidates: Array<{ recommendedAction: unknown; value: string }>;
+    };
+    assert.equal(resolverResult.stderr, "");
+    assert.equal(parsedResolverResult.candidates[0]?.value, "Olivas");
+    assert.deepEqual(parsedResolverResult.candidates[0]?.recommendedAction, {
+      type: "uncross_item",
+      listId: "list-id",
+      itemId: "crossed-id",
+    });
+
+    assert.deepEqual(client.calls, [
+      { method: "getLists" },
+      { method: "getLists" },
+      { method: "getLists" },
+      { method: "getLists" },
+      { method: "getLists" },
+    ]);
   });
 });
 
@@ -413,8 +569,13 @@ test("mutation commands call the expected client methods and print stable JSON",
       env,
       client
     );
-    const toggleResult = await runCliProgram(
-      ["toggle-item", "--list-id", "list-id", "--item-id", "item-id", "--crossed-off"],
+    const crossOffResult = await runCliProgram(
+      ["cross-off-item", "--list-id", "list-id", "--item-id", "item-id"],
+      env,
+      client
+    );
+    const uncrossResult = await runCliProgram(
+      ["uncross-item", "--list-id", "list-id", "--item-id", "item-id"],
       env,
       client
     );
@@ -454,13 +615,20 @@ test("mutation commands call the expected client methods and print stable JSON",
       star: 1,
     });
 
-    assert.equal(toggleResult.stderr, "");
-    assert.deepEqual(parseJson(toggleResult.stdout), {
+    assert.equal(crossOffResult.stderr, "");
+    assert.deepEqual(parseJson(crossOffResult.stdout), {
       ok: true,
-      operation: "toggle_item",
+      operation: "cross_off_item",
       listId: "list-id",
       itemId: "item-id",
-      crossedOff: true,
+    });
+
+    assert.equal(uncrossResult.stderr, "");
+    assert.deepEqual(parseJson(uncrossResult.stdout), {
+      ok: true,
+      operation: "uncross_item",
+      listId: "list-id",
+      itemId: "item-id",
     });
 
     assert.deepEqual(client.calls, [
@@ -478,14 +646,18 @@ test("mutation commands call the expected client methods and print stable JSON",
         method: "updateItem",
       },
       {
-        input: { listId: "list-id", itemId: "item-id", crossedOff: true },
-        method: "toggleItem",
+        input: { listId: "list-id", itemId: "item-id" },
+        method: "crossOffItem",
+      },
+      {
+        input: { listId: "list-id", itemId: "item-id" },
+        method: "uncrossItem",
       },
     ]);
   });
 });
 
-test("toggle-item rejects missing or conflicting toggle flags", async () => {
+test("get-crossed-off-items rejects conflicting sort flags", async () => {
   await withTempCliHome(async ({ appData, configPath, home }) => {
     await writeConfig(configPath, {
       authCookie: "config-auth-cookie-value",
@@ -498,30 +670,14 @@ test("toggle-item rejects missing or conflicting toggle flags", async () => {
       USERPROFILE: home,
     };
 
-    const missingFlagResult = await runCli(
-      ["toggle-item", "--list-id", "list-id", "--item-id", "item-id"],
-      env
-    );
     const conflictingFlagsResult = await runCli(
-      [
-        "toggle-item",
-        "--list-id",
-        "list-id",
-        "--item-id",
-        "item-id",
-        "--crossed-off",
-        "--uncrossed",
-      ],
+      ["get-crossed-off-items", "--list-id", "list-id", "--asc", "--desc"],
       env
     );
-
-    assert.equal(missingFlagResult.code, 1);
-    assert.equal(missingFlagResult.stdout, "");
-    assert.match(missingFlagResult.stderr, /exactly one of --crossed-off or --uncrossed/);
 
     assert.equal(conflictingFlagsResult.code, 1);
     assert.equal(conflictingFlagsResult.stdout, "");
-    assert.match(conflictingFlagsResult.stderr, /exactly one of --crossed-off or --uncrossed/);
+    assert.match(conflictingFlagsResult.stderr, /at most one of --asc or --desc/);
   });
 });
 

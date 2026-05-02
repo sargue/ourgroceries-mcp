@@ -6,9 +6,9 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import type {
   AddItemInput,
+  CrossOffItemInput,
   OurGroceriesClientApi,
   RemoveItemInput,
-  ToggleItemInput,
   UpdateItemInput,
 } from "../src/client.js";
 import { OurGroceriesServer } from "../src/index.js";
@@ -18,19 +18,76 @@ type MockClientCall =
   | { input: AddItemInput; method: "addItem" }
   | { input: RemoveItemInput; method: "removeItem" }
   | { input: UpdateItemInput; method: "updateItem" }
-  | { input: ToggleItemInput; method: "toggleItem" };
+  | { input: CrossOffItemInput; method: "crossOffItem" }
+  | { input: CrossOffItemInput; method: "uncrossItem" };
 
 interface ToolContentResult {
   content: Array<{ text?: string; type: string }>;
   isError?: boolean;
 }
 
+const crossedOffAt = Date.UTC(2024, 0, 2);
+
+function createRawListsPayload() {
+  return {
+    listSchemaVersion: 6,
+    settings: {
+      showPhotos: true,
+    },
+    lists: [
+      {
+        id: "list-id",
+        name: "Groceries",
+        listType: "SHOPPING",
+        versionId: "version-1",
+        items: [
+          {
+            id: "active-id",
+            value: "Milk",
+            name: "Milk",
+          },
+          {
+            id: "crossed-id",
+            value: "Olivas",
+            name: "Olivas",
+            crossedOffAt,
+          },
+        ],
+      },
+      {
+        id: "master-list-id",
+        name: "All Items",
+        listType: "MASTER",
+        items: [
+          {
+            id: "master-olivas-id",
+            value: "Olivas",
+            name: "Olivas",
+            addedCount: 8,
+            lastAddedAt: crossedOffAt,
+          },
+        ],
+      },
+      {
+        id: "category-list-id",
+        name: "Categories",
+        listType: "CATEGORY",
+        items: [
+          {
+            id: "category-id",
+            value: "Produce",
+            name: "Produce",
+          },
+        ],
+      },
+    ],
+  };
+}
+
 class MockOurGroceriesClient implements OurGroceriesClientApi {
   calls: MockClientCall[] = [];
   error: Error | null = null;
-  getListsResult: unknown = {
-    lists: [{ id: "list-id", name: "Grocery List", items: [] }],
-  };
+  getListsResult: unknown = createRawListsPayload();
 
   async getLists(): Promise<unknown> {
     this.throwIfNeeded();
@@ -54,9 +111,14 @@ class MockOurGroceriesClient implements OurGroceriesClientApi {
     this.calls.push({ input, method: "updateItem" });
   }
 
-  async toggleItem(input: ToggleItemInput): Promise<void> {
+  async crossOffItem(input: CrossOffItemInput): Promise<void> {
     this.throwIfNeeded();
-    this.calls.push({ input, method: "toggleItem" });
+    this.calls.push({ input, method: "crossOffItem" });
+  }
+
+  async uncrossItem(input: CrossOffItemInput): Promise<void> {
+    this.throwIfNeeded();
+    this.calls.push({ input, method: "uncrossItem" });
   }
 
   private throwIfNeeded() {
@@ -109,32 +171,142 @@ function assertTextResult(result: Awaited<ReturnType<Client["callTool"]>>, text:
   assert.equal(firstContent.text, text);
 }
 
-test("MCP server lists the existing OurGroceries tools", async () => {
+function parseTextJson(result: Awaited<ReturnType<Client["callTool"]>>): unknown {
+  const contentResult = asToolContentResult(result);
+  const text = contentResult.content[0]?.text;
+  if (!text) {
+    assert.fail("Expected text content");
+  }
+
+  return JSON.parse(text) as unknown;
+}
+
+test("MCP server lists the focused OurGroceries tools", async () => {
   await withConnectedServer(async ({ mcpClient }) => {
     const result = await mcpClient.listTools();
 
     assert.deepEqual(
       result.tools.map((tool) => tool.name),
-      ["get_lists", "add_item", "remove_item", "update_item", "toggle_item"]
+      [
+        "get_lists",
+        "get_categories",
+        "get_settings",
+        "get_active_items",
+        "get_crossed_off_items",
+        "resolve_item_to_add",
+        "add_item",
+        "remove_item",
+        "update_item",
+        "cross_off_item",
+        "uncross_item",
+      ]
     );
+
+    const resolverTool = result.tools.find((tool) => tool.name === "resolve_item_to_add");
+    assert.ok(resolverTool);
+    assert.deepEqual(resolverTool.inputSchema.required, ["query"]);
 
     const addItemTool = result.tools.find((tool) => tool.name === "add_item");
     assert.ok(addItemTool);
-    assert.deepEqual(addItemTool.inputSchema.required, ["listId", "value"]);
-
-    const noteSchema = addItemTool.inputSchema.properties?.note as
-      | { default?: unknown }
-      | undefined;
-    assert.equal(noteSchema?.default, "");
+    assert.match(addItemTool.description ?? "", /resolve_item_to_add/);
   });
 });
 
-test("MCP tool calls dispatch to the OurGroceries client", async () => {
+test("MCP read tools transform the raw OurGroceries payload", async () => {
   await withConnectedServer(async ({ mcpClient, ourGroceriesClient }) => {
-    assertTextResult(
-      await mcpClient.callTool({ name: "get_lists", arguments: {} }),
-      JSON.stringify(ourGroceriesClient.getListsResult, null, 2)
+    assert.deepEqual(
+      parseTextJson(await mcpClient.callTool({ name: "get_lists", arguments: {} })),
+      [
+        {
+          id: "list-id",
+          name: "Groceries",
+          itemCount: 2,
+          activeItemCount: 1,
+          crossedOffItemCount: 1,
+          versionId: "version-1",
+        },
+      ]
     );
+
+    assert.deepEqual(
+      parseTextJson(await mcpClient.callTool({ name: "get_categories", arguments: {} })),
+      [{ id: "category-id", value: "Produce" }]
+    );
+
+    assert.deepEqual(
+      parseTextJson(await mcpClient.callTool({ name: "get_settings", arguments: {} })),
+      {
+        settings: {
+          showPhotos: true,
+        },
+        listSchemaVersion: 6,
+      }
+    );
+
+    assert.deepEqual(
+      parseTextJson(
+        await mcpClient.callTool({
+          name: "get_active_items",
+          arguments: { listId: "list-id" },
+        })
+      ),
+      [{ id: "active-id", value: "Milk", name: "Milk" }]
+    );
+
+    assert.deepEqual(
+      parseTextJson(
+        await mcpClient.callTool({
+          name: "get_crossed_off_items",
+          arguments: { listId: "list-id", search: "olí", limit: 1 },
+        })
+      ),
+      {
+        listId: "list-id",
+        items: [
+          {
+            id: "crossed-id",
+            value: "Olivas",
+            name: "Olivas",
+            crossedOffAt: {
+              epochMs: crossedOffAt,
+              iso: new Date(crossedOffAt).toISOString(),
+            },
+          },
+        ],
+        total: 1,
+        limit: 1,
+        offset: 0,
+        hasMore: false,
+      }
+    );
+
+    const resolverResult = parseTextJson(
+      await mcpClient.callTool({
+        name: "resolve_item_to_add",
+        arguments: { query: "añadir olivas", listId: "list-id" },
+      })
+    ) as { candidates: Array<{ recommendedAction: unknown; value: string }> };
+
+    assert.equal(resolverResult.candidates[0]?.value, "Olivas");
+    assert.deepEqual(resolverResult.candidates[0]?.recommendedAction, {
+      type: "uncross_item",
+      listId: "list-id",
+      itemId: "crossed-id",
+    });
+
+    assert.deepEqual(ourGroceriesClient.calls, [
+      { method: "getLists" },
+      { method: "getLists" },
+      { method: "getLists" },
+      { method: "getLists" },
+      { method: "getLists" },
+      { method: "getLists" },
+    ]);
+  });
+});
+
+test("MCP mutation tool calls dispatch to the OurGroceries client", async () => {
+  await withConnectedServer(async ({ mcpClient, ourGroceriesClient }) => {
     assertTextResult(
       await mcpClient.callTool({
         name: "add_item",
@@ -158,14 +330,20 @@ test("MCP tool calls dispatch to the OurGroceries client", async () => {
     );
     assertTextResult(
       await mcpClient.callTool({
-        name: "toggle_item",
-        arguments: { listId: "list-id", itemId: "item-id", crossedOff: false },
+        name: "cross_off_item",
+        arguments: { listId: "list-id", itemId: "item-id" },
+      }),
+      "Successfully crossed off item"
+    );
+    assertTextResult(
+      await mcpClient.callTool({
+        name: "uncross_item",
+        arguments: { listId: "list-id", itemId: "item-id" },
       }),
       "Successfully uncrossed item"
     );
 
     assert.deepEqual(ourGroceriesClient.calls, [
-      { method: "getLists" },
       { input: { listId: "list-id", value: "milk", note: "" }, method: "addItem" },
       { input: { listId: "list-id", itemId: "item-id" }, method: "removeItem" },
       {
@@ -180,8 +358,12 @@ test("MCP tool calls dispatch to the OurGroceries client", async () => {
         method: "updateItem",
       },
       {
-        input: { listId: "list-id", itemId: "item-id", crossedOff: false },
-        method: "toggleItem",
+        input: { listId: "list-id", itemId: "item-id" },
+        method: "crossOffItem",
+      },
+      {
+        input: { listId: "list-id", itemId: "item-id" },
+        method: "uncrossItem",
       },
     ]);
   });

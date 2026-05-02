@@ -27,10 +27,9 @@ export interface UpdateItemInput {
   star?: number;
 }
 
-export interface ToggleItemInput {
+export interface CrossOffItemInput {
   listId: string;
   itemId: string;
-  crossedOff: boolean;
 }
 
 export interface OurGroceriesClientApi {
@@ -38,7 +37,8 @@ export interface OurGroceriesClientApi {
   addItem(input: AddItemInput): Promise<void>;
   removeItem(input: RemoveItemInput): Promise<void>;
   updateItem(input: UpdateItemInput): Promise<void>;
-  toggleItem(input: ToggleItemInput): Promise<void>;
+  crossOffItem(input: CrossOffItemInput): Promise<void>;
+  uncrossItem(input: CrossOffItemInput): Promise<void>;
 }
 
 export interface OurGroceriesClientOptions {
@@ -105,7 +105,18 @@ export class OurGroceriesClient implements OurGroceriesClientApi {
     });
   }
 
-  async toggleItem({ listId, itemId, crossedOff }: ToggleItemInput): Promise<void> {
+  async crossOffItem(input: CrossOffItemInput): Promise<void> {
+    await this.setItemCrossedOff(input, true);
+  }
+
+  async uncrossItem(input: CrossOffItemInput): Promise<void> {
+    await this.setItemCrossedOff(input, false);
+  }
+
+  private async setItemCrossedOff(
+    { listId, itemId }: CrossOffItemInput,
+    crossedOff: boolean
+  ): Promise<void> {
     await this.makeRequest({
       command: "setItemCrossedOff",
       listId,

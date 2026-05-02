@@ -6,11 +6,13 @@ A Model Context Protocol (MCP) server for managing grocery lists on OurGroceries
 
 This MCP server provides tools to:
 
-- Get all grocery lists and their items
+- Get visible shopping-list summaries without raw item arrays
+- Get categories, settings, active items, and crossed-off item history
+- Resolve natural-language item requests against the master catalog and shopping history
 - Add items to lists
 - Remove items from lists
 - Update item details (name, category, notes, star rating)
-- Toggle items as crossed off/uncrossed
+- Cross off and uncross items
 
 ## Installation
 
@@ -96,11 +98,23 @@ auth cookies, and cookie headers.
 
 ## What You Can Do
 
-- **View your lists:** See all your grocery lists and items
-- **Add items:** Add new items to any list with optional notes
+- **View your lists:** See shopping-list IDs and item counts without dumping every item
+- **Read items:** Get active items or filtered crossed-off history for one list
+- **Resolve item names:** Turn natural-language item text into the value OurGroceries has seen before
+- **Add items:** Add deterministic item values to any list with optional notes
 - **Remove items:** Delete items from your lists
 - **Update items:** Change item names, categories, notes, or star ratings
-- **Check off items:** Mark items as crossed off or uncrossed
+- **Check off items:** Cross items off or uncross previously crossed-off items
+
+## Recommended Add Flow
+
+For ambiguous item names, use the resolver before mutating a list:
+
+1. Call `resolve_item_to_add` with the user's text and, when known, `listId`.
+2. Review the top candidate and its `recommendedAction`.
+3. Call `add_item` only when the recommendation is `add_item`.
+4. Call `uncross_item` when the recommendation is `uncross_item`.
+5. Do not mutate when the recommendation is `already_active`.
 
 ## Example Usage
 
@@ -144,16 +158,23 @@ node build/cli.js logout
 ```
 
 Operational commands print JSON on success and write errors to stderr with a nonzero exit code.
-They use explicit IDs only; get list and item IDs from `get-lists` before mutating items:
+They use explicit IDs for mutations. Use focused reads and the resolver before mutating items:
 
 ```bash
 node build/cli.js get-lists
+node build/cli.js get-categories
+node build/cli.js get-settings
+node build/cli.js get-active-items --list-id LIST_ID
+node build/cli.js get-crossed-off-items --list-id LIST_ID --search "milk" --limit 20
+node build/cli.js resolve-item-to-add --query "add olives" --list-id LIST_ID
 node build/cli.js add-item --list-id LIST_ID --value "milk" --note "2%"
 node build/cli.js remove-item --list-id LIST_ID --item-id ITEM_ID
 node build/cli.js update-item --list-id LIST_ID --item-id ITEM_ID --new-value "whole milk" --star 1
-node build/cli.js toggle-item --list-id LIST_ID --item-id ITEM_ID --crossed-off
-node build/cli.js toggle-item --list-id LIST_ID --item-id ITEM_ID --uncrossed
+node build/cli.js cross-off-item --list-id LIST_ID --item-id ITEM_ID
+node build/cli.js uncross-item --list-id LIST_ID --item-id ITEM_ID
 ```
+
+Reference docs for maintainers live in `docs/`.
 
 Before sending CLI changes, run:
 

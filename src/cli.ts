@@ -9,6 +9,15 @@ import { OurGroceriesClient } from "./client.js";
 import type { OurGroceriesClientApi } from "./client.js";
 import { saveConfig, getConfigPath, loadConfigResult, removeConfig } from "./config.js";
 import type { Config, ConfigLoadResult } from "./config.js";
+import {
+  getActiveItems,
+  getCategories,
+  getCrossedOffItems,
+  getListSummaries,
+  getSettings,
+  resolveItemToAdd,
+} from "./data.js";
+import type { CrossedOffItemsSortBy } from "./data.js";
 import { VERSION } from "./version.js";
 
 const envCredentialNames = ["OURGROCERIES_AUTH_COOKIE", "OURGROCERIES_TEAM_ID"] as const;
@@ -120,10 +129,96 @@ export function createProgram(options: CliProgramOptions = {}): Command {
 
   program
     .command("get-lists")
-    .description("Get all grocery lists with their items")
+    .description("Get visible shopping list summaries without item arrays")
     .action(async () => {
       await runOperationalCommand("get-lists", runtime, async (client) => {
-        writeJson(runtime, await client.getLists());
+        writeJson(runtime, getListSummaries(await client.getLists()));
+      });
+    });
+
+  program
+    .command("get-categories")
+    .description("Get OurGroceries item categories")
+    .action(async () => {
+      await runOperationalCommand("get-categories", runtime, async (client) => {
+        writeJson(runtime, getCategories(await client.getLists()));
+      });
+    });
+
+  program
+    .command("get-settings")
+    .description("Get OurGroceries account settings")
+    .action(async () => {
+      await runOperationalCommand("get-settings", runtime, async (client) => {
+        writeJson(runtime, getSettings(await client.getLists()));
+      });
+    });
+
+  program
+    .command("get-active-items")
+    .description("Get active items from a shopping list")
+    .requiredOption("--list-id <listId>", "The ID of the list to read")
+    .action(async (options: GetActiveItemsOptions) => {
+      await runOperationalCommand("get-active-items", runtime, async (client) => {
+        writeJson(runtime, getActiveItems(await client.getLists(), options.listId));
+      });
+    });
+
+  program
+    .command("get-crossed-off-items")
+    .description("Get crossed-off items from a shopping list")
+    .requiredOption("--list-id <listId>", "The ID of the list to read")
+    .option("--search <search>", "Case- and accent-insensitive search text")
+    .option("--crossed-off-after <date>", "ISO date or epoch milliseconds lower bound")
+    .option("--crossed-off-before <date>", "ISO date or epoch milliseconds upper bound")
+    .option("--sort-by <sortBy>", "crossedOffAt or name", parseCrossedOffSortBy)
+    .option("--asc", "Sort ascending")
+    .option("--desc", "Sort descending")
+    .option("--limit <limit>", "Maximum items to return", parseNonNegativeIntegerOption)
+    .option("--offset <offset>", "Pagination offset", parseNonNegativeIntegerOption)
+    .action(async (options: GetCrossedOffItemsOptions) => {
+      const sortOrder = parseSortOrderOptions(
+        "get-crossed-off-items",
+        options.asc,
+        options.desc,
+        runtime
+      );
+
+      await runOperationalCommand("get-crossed-off-items", runtime, async (client) => {
+        writeJson(
+          runtime,
+          getCrossedOffItems(await client.getLists(), {
+            listId: options.listId,
+            search: options.search,
+            crossedOffAfter: options.crossedOffAfter,
+            crossedOffBefore: options.crossedOffBefore,
+            sortBy: options.sortBy,
+            sortOrder,
+            limit: options.limit,
+            offset: options.offset,
+          })
+        );
+      });
+    });
+
+  program
+    .command("resolve-item-to-add")
+    .description(
+      "Resolve natural-language item text against the master catalog and shopping history"
+    )
+    .requiredOption("--query <query>", "The item text to resolve")
+    .option("--list-id <listId>", "Optional target list ID")
+    .option("--limit <limit>", "Maximum candidates to return", parseNonNegativeIntegerOption)
+    .action(async (options: ResolveItemToAddOptions) => {
+      await runOperationalCommand("resolve-item-to-add", runtime, async (client) => {
+        writeJson(
+          runtime,
+          resolveItemToAdd(await client.getLists(), {
+            query: options.query,
+            listId: options.listId,
+            limit: options.limit,
+          })
+        );
       });
     });
 
@@ -212,28 +307,43 @@ export function createProgram(options: CliProgramOptions = {}): Command {
     });
 
   program
-    .command("toggle-item")
-    .description("Mark an item as crossed off or uncrossed")
+    .command("cross-off-item")
+    .description("Mark an item as crossed off")
     .requiredOption("--list-id <listId>", "The ID of the list containing the item")
-    .requiredOption("--item-id <itemId>", "The ID of the item to toggle")
-    .option("--crossed-off", "Mark the item crossed off")
-    .option("--uncrossed", "Mark the item uncrossed")
-    .action(async (options: ToggleItemOptions) => {
-      const crossedOff = parseToggleCrossedOff(options, runtime);
-
-      await runOperationalCommand("toggle-item", runtime, async (client) => {
-        await client.toggleItem({
+    .requiredOption("--item-id <itemId>", "The ID of the item to cross off")
+    .action(async (options: CrossOffItemOptions) => {
+      await runOperationalCommand("cross-off-item", runtime, async (client) => {
+        await client.crossOffItem({
           listId: options.listId,
           itemId: options.itemId,
-          crossedOff,
         });
 
         writeJson(runtime, {
           ok: true,
-          operation: "toggle_item",
+          operation: "cross_off_item",
           listId: options.listId,
           itemId: options.itemId,
-          crossedOff,
+        });
+      });
+    });
+
+  program
+    .command("uncross-item")
+    .description("Mark an item as active again")
+    .requiredOption("--list-id <listId>", "The ID of the list containing the item")
+    .requiredOption("--item-id <itemId>", "The ID of the item to uncross")
+    .action(async (options: CrossOffItemOptions) => {
+      await runOperationalCommand("uncross-item", runtime, async (client) => {
+        await client.uncrossItem({
+          listId: options.listId,
+          itemId: options.itemId,
+        });
+
+        writeJson(runtime, {
+          ok: true,
+          operation: "uncross_item",
+          listId: options.listId,
+          itemId: options.itemId,
         });
       });
     });
@@ -252,6 +362,28 @@ interface AddItemOptions {
   value: string;
 }
 
+interface GetActiveItemsOptions {
+  listId: string;
+}
+
+interface GetCrossedOffItemsOptions {
+  asc?: boolean;
+  crossedOffAfter?: string;
+  crossedOffBefore?: string;
+  desc?: boolean;
+  limit?: number;
+  listId: string;
+  offset?: number;
+  search?: string;
+  sortBy?: CrossedOffItemsSortBy;
+}
+
+interface ResolveItemToAddOptions {
+  limit?: number;
+  listId?: string;
+  query: string;
+}
+
 interface RemoveItemOptions {
   itemId: string;
   listId: string;
@@ -266,11 +398,9 @@ interface UpdateItemOptions {
   star?: number;
 }
 
-interface ToggleItemOptions {
-  crossedOff?: boolean;
+interface CrossOffItemOptions {
   itemId: string;
   listId: string;
-  uncrossed?: boolean;
 }
 
 type EnvCredentialResult =
@@ -319,14 +449,45 @@ function parseStarOption(value: string): number {
   return Number(value);
 }
 
-function parseToggleCrossedOff(options: ToggleItemOptions, runtime: CliRuntime): boolean {
-  if (Boolean(options.crossedOff) === Boolean(options.uncrossed)) {
-    const message = "toggle-item requires exactly one of --crossed-off or --uncrossed";
-    runtime.stderr(`Error: ${message}\n`);
-    throw new CommanderError(1, "toggle-item.invalidToggle", message);
+function parseCrossedOffSortBy(value: string): CrossedOffItemsSortBy {
+  if (value !== "crossedOffAt" && value !== "name") {
+    throw new InvalidArgumentError("must be crossedOffAt or name");
   }
 
-  return Boolean(options.crossedOff);
+  return value;
+}
+
+function parseNonNegativeIntegerOption(value: string): number {
+  const parsedValue = Number(value);
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 0) {
+    throw new InvalidArgumentError("must be a non-negative integer");
+  }
+
+  return parsedValue;
+}
+
+function parseSortOrderOptions(
+  commandName: string,
+  asc: boolean | undefined,
+  desc: boolean | undefined,
+  runtime: CliRuntime
+): "asc" | "desc" | undefined {
+  if (asc && desc) {
+    const message = `${commandName} requires at most one of --asc or --desc`;
+    runtime.stderr(`Error: ${message}\n`);
+    throw new CommanderError(1, `${commandName}.invalidSortOrder`, message);
+  }
+
+  if (asc) {
+    return "asc";
+  }
+
+  if (desc) {
+    return "desc";
+  }
+
+  return undefined;
 }
 
 function writeJson(runtime: CliRuntime, value: unknown) {
