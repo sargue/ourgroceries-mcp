@@ -1,10 +1,11 @@
-# OurGroceries MCP Server
+# OurGroceries MCP Server & CLI
 
-A Model Context Protocol (MCP) server for managing grocery lists on OurGroceries.com.
+A command-line tool and Model Context Protocol (MCP) server for managing grocery lists on
+OurGroceries.com.
 
 ## Features
 
-This MCP server provides tools to:
+This package provides CLI commands and MCP tools to:
 
 - Get visible shopping-list summaries without raw item arrays
 - Get categories, settings, active items, and crossed-off item history
@@ -19,7 +20,7 @@ This MCP server provides tools to:
 The npm package is published as `@sergib/ourgroceries-mcp`. The installed executable remains
 `ourgroceries-mcp`.
 
-### Step 1: Login to OurGroceries
+### Login to OurGroceries
 
 Authenticate with your OurGroceries account:
 
@@ -31,15 +32,57 @@ Enter your email and password when prompted.
 
 The login command saves an OurGroceries auth cookie and team ID. It does not save your password.
 
-### Step 2: Add to Claude
+## CLI Usage
 
-#### For Claude Code
+Run commands directly with `npx`; no global install is required. Operational commands print JSON on
+success and write errors to stderr with a nonzero exit code.
+
+Start by listing your shopping lists, then use the returned list IDs for item commands:
+
+```bash
+npx -y @sergib/ourgroceries-mcp get-lists
+npx -y @sergib/ourgroceries-mcp get-active-items --list-id LIST_ID
+npx -y @sergib/ourgroceries-mcp get-crossed-off-items --list-id LIST_ID --search "milk" --limit 20
+```
+
+Use the resolver before adding ambiguous item text. It can tell you whether to add a new item,
+uncross an existing crossed-off item, or do nothing because the item is already active:
+
+```bash
+npx -y @sergib/ourgroceries-mcp resolve-item-to-add --query "add olives" --list-id LIST_ID
+npx -y @sergib/ourgroceries-mcp add-item --list-id LIST_ID --value "olives"
+npx -y @sergib/ourgroceries-mcp uncross-item --list-id LIST_ID --item-id ITEM_ID
+```
+
+Other useful commands:
+
+```bash
+npx -y @sergib/ourgroceries-mcp get-categories
+npx -y @sergib/ourgroceries-mcp get-settings
+npx -y @sergib/ourgroceries-mcp update-item --list-id LIST_ID --item-id ITEM_ID --new-value "whole milk"
+npx -y @sergib/ourgroceries-mcp cross-off-item --list-id LIST_ID --item-id ITEM_ID
+npx -y @sergib/ourgroceries-mcp remove-item --list-id LIST_ID --item-id ITEM_ID
+```
+
+For the full command list and options:
+
+```bash
+npx -y @sergib/ourgroceries-mcp --help
+npx -y @sergib/ourgroceries-mcp get-crossed-off-items --help
+```
+
+## MCP Usage
+
+Running the package without a subcommand starts the MCP server over stdio. Add it to an MCP client
+after logging in.
+
+### For Claude Code
 
 ```bash
 claude mcp add ourgroceries npx -y @sergib/ourgroceries-mcp
 ```
 
-#### For Claude Desktop
+### For Claude Desktop
 
 Add to your configuration file:
 
@@ -89,15 +132,15 @@ environment variables.
 
 ### Troubleshooting Credentials
 
-If the server reports missing or invalid credentials, run:
+If the CLI or MCP server reports missing or invalid credentials, run:
 
 ```bash
 npx -y @sergib/ourgroceries-mcp login
 ```
 
-Then restart your MCP client. If you use environment variables instead of the config file, refresh
-both variables. Login debug output from `npx -y @sergib/ourgroceries-mcp login --debug` redacts
-passwords, auth cookies, and cookie headers.
+Then retry your CLI command or restart your MCP client. If you use environment variables instead of
+the config file, refresh both variables. Login debug output from
+`npx -y @sergib/ourgroceries-mcp login --debug` redacts passwords, auth cookies, and cookie headers.
 
 ## What You Can Do
 
@@ -119,7 +162,7 @@ For ambiguous item names, use the resolver before mutating a list:
 4. Call `uncross_item` when the recommendation is `uncross_item`.
 5. Do not mutate when the recommendation is `already_active`.
 
-## Example Usage
+## MCP Example Prompts
 
 Once configured, you can ask Claude:
 
