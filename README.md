@@ -240,3 +240,13 @@ Before sending CLI changes, run:
 npm run check
 npm audit --audit-level=moderate
 ```
+
+### Publishing to npm
+
+When publishing a new package version, refresh npm authentication and verify the account first:
+
+```bash
+npm login
+npm whoami
+npm publish --access public
+```
