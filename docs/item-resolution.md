@@ -21,6 +21,7 @@ Shopping-list history is tracked separately:
 - occurrence count;
 - number of lists where the value appeared;
 - latest crossed-off timestamp;
+- ranked target-list suggestions with list names, status, action, and evidence;
 - target-list status when `listId` is provided.
 
 ## Matching
@@ -49,12 +50,38 @@ Scores combine:
 Scores are evidence for ranking, not a guarantee. Agents should inspect the top candidate and action
 before mutating.
 
+## Suggested Targets
+
+Each candidate includes `suggestedTargets`, ranked from the candidate's shopping-list history. A
+suggestion includes:
+
+- `listId` and `listName`;
+- `status`: `active` or `crossed_off`;
+- `recommendedAction` for that list;
+- occurrence counts;
+- latest crossed-off timestamp when present;
+- crossed-off rank and crossed-off count when present.
+
+Without a caller-provided `listId`, the resolver may still return a list-specific
+`recommendedAction` when the best target is high-confidence and clearly ahead of the next suggestion.
+This lets agents handle requests such as `add platanos` or just `plátanos` without asking for a list
+when the user's history strongly points to one list.
+
+If `recommendedAction` is still `choose_list`, inspect `suggestedTargets`. Ask the user only when the
+list is genuinely ambiguous or there is no useful list history.
+
 ## Recommended Actions
 
 When no `listId` is provided:
 
 ```json
 { "type": "choose_list", "value": "Olivas" }
+```
+
+When no `listId` is provided but list history strongly identifies a crossed-off item:
+
+```json
+{ "type": "uncross_item", "listId": "LIST_ID", "itemId": "ITEM_ID" }
 ```
 
 When the value is already active in the target list:
@@ -81,5 +108,6 @@ For a user request like `anadir olivas`, the resolver can match a catalog value 
 because matching folds accents and compares words. If that value is crossed off in the target list,
 the agent should call `uncross_item` rather than adding a duplicate active item.
 
-For `milk` with no target list, the resolver can still identify a known value, but it returns
-`choose_list` because mutations require a shopping-list ID.
+For `milk` with no target list, the resolver can identify that the item is already active on a
+specific list and return `already_active` when that list suggestion is high-confidence. For a
+catalog-only value with no shopping-list history, it returns `choose_list`.

@@ -83,7 +83,27 @@ export interface ResolvedItemCandidate {
     listCount: number;
     lastCrossedOffAt?: Timestamp;
   };
+  suggestedTargets: SuggestedTargetList[];
   targetList?: TargetListEvidence;
+  recommendedAction: RecommendedAction;
+}
+
+export interface SuggestedTargetList {
+  listId: string;
+  listName: string;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  status: "active" | "crossed_off";
+  itemId: string;
+  value: string;
+  evidence: {
+    occurrenceCount: number;
+    activeOccurrenceCount: number;
+    crossedOffOccurrenceCount: number;
+    latestCrossedOffAt?: Timestamp;
+    crossedOffRank?: number;
+    crossedOffCount?: number;
+  };
   recommendedAction: RecommendedAction;
 }
 
@@ -136,8 +156,11 @@ interface CandidateIndexEntry {
 
 interface ShoppingOccurrence {
   crossedOffAt?: Timestamp;
+  crossedOffCount: number;
+  crossedOffRank?: number;
   itemId: string;
   listId: string;
+  listName: string;
 }
 
 interface ScoringContext {
@@ -157,6 +180,8 @@ const defaultCrossedOffLimit = 50;
 const maxCrossedOffLimit = 200;
 const defaultResolverLimit = 10;
 const maxResolverLimit = 20;
+const maxSuggestedTargetLists = 5;
+const suggestedTargetScoreMargin = 10;
 const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
 const queryStopWords = new Set([
@@ -643,17 +668,35 @@ function buildCandidateIndex(payload: unknown): Map<string, CandidateIndexEntry>
       continue;
     }
 
-    for (const item of getListItems(list)) {
+    const listName = stringValue(list.name) ?? "";
+    const items = getListItems(list);
+    const crossedOffItems = items
+      .flatMap((item) => {
+        const itemId = stringValue(item.id);
+        const crossedOffAt = getCrossedOffAt(item);
+        return itemId && crossedOffAt ? [{ crossedOffAt, item, itemId }] : [];
+      })
+      .sort((left, right) => right.crossedOffAt.epochMs - left.crossedOffAt.epochMs);
+    const crossedOffRanks = new Map<string, number>();
+    crossedOffItems.forEach((item, index) => {
+      crossedOffRanks.set(item.itemId, index + 1);
+    });
+
+    for (const item of items) {
       const value = stringValue(item.value);
       const itemId = stringValue(item.id);
       if (!value || !itemId) {
         continue;
       }
 
+      const crossedOffAt = getCrossedOffAt(item);
       ensureCandidate(entries, value).shoppingOccurrences.push({
         listId,
+        listName,
         itemId,
-        crossedOffAt: getCrossedOffAt(item),
+        crossedOffAt,
+        crossedOffCount: crossedOffItems.length,
+        crossedOffRank: crossedOffAt ? crossedOffRanks.get(itemId) : undefined,
       });
     }
   }
@@ -782,6 +825,7 @@ function toResolvedCandidate(
   context: ScoringContext
 ): ResolvedItemCandidate {
   const targetList = context.listId ? getTargetListEvidence(entry, context.listId) : undefined;
+  const suggestedTargets = getSuggestedTargets(entry, context);
   const latestCrossedOffAt = getLatestCrossedOffAt(entry.shoppingOccurrences);
   const listCount = new Set(entry.shoppingOccurrences.map((occurrence) => occurrence.listId)).size;
   const score = calculateScore(entry, match, context, targetList, latestCrossedOffAt);
@@ -795,7 +839,8 @@ function toResolvedCandidate(
       shoppingOccurrenceCount: entry.shoppingOccurrences.length,
       listCount,
     },
-    recommendedAction: recommendedAction(entry.value, context.listId, targetList),
+    suggestedTargets,
+    recommendedAction: recommendedAction(entry.value, context.listId, targetList, suggestedTargets),
   };
 
   if (entry.masterItemId) {
@@ -907,6 +952,180 @@ function getTargetListEvidence(entry: CandidateIndexEntry, listId: string): Targ
   };
 }
 
+function getSuggestedTargets(
+  entry: CandidateIndexEntry,
+  context: ScoringContext
+): SuggestedTargetList[] {
+  const groupedOccurrences = new Map<string, ShoppingOccurrence[]>();
+
+  for (const occurrence of entry.shoppingOccurrences) {
+    const occurrences = groupedOccurrences.get(occurrence.listId);
+    if (occurrences) {
+      occurrences.push(occurrence);
+    } else {
+      groupedOccurrences.set(occurrence.listId, [occurrence]);
+    }
+  }
+
+  return [...groupedOccurrences.entries()]
+    .flatMap(([listId, occurrences]) =>
+      toSuggestedTarget(entry.value, listId, occurrences, context)
+    )
+    .sort((left, right) => {
+      const scoreComparison = right.score - left.score;
+      if (scoreComparison !== 0) {
+        return scoreComparison;
+      }
+
+      const rightCrossedOffAt = right.evidence.latestCrossedOffAt?.epochMs ?? 0;
+      const leftCrossedOffAt = left.evidence.latestCrossedOffAt?.epochMs ?? 0;
+      if (rightCrossedOffAt !== leftCrossedOffAt) {
+        return rightCrossedOffAt - leftCrossedOffAt;
+      }
+
+      return compareStrings(left.listName, right.listName);
+    })
+    .slice(0, maxSuggestedTargetLists);
+}
+
+function toSuggestedTarget(
+  value: string,
+  listId: string,
+  occurrences: ShoppingOccurrence[],
+  context: ScoringContext
+): SuggestedTargetList[] {
+  const activeOccurrences = occurrences.filter((occurrence) => !occurrence.crossedOffAt);
+  const crossedOffOccurrences = occurrences.filter((occurrence) => occurrence.crossedOffAt);
+  const activeOccurrence = activeOccurrences[0];
+  const latestCrossedOffOccurrence = crossedOffOccurrences
+    .slice()
+    .sort(
+      (left, right) => (right.crossedOffAt?.epochMs ?? 0) - (left.crossedOffAt?.epochMs ?? 0)
+    )[0];
+  const selectedOccurrence = activeOccurrence ?? latestCrossedOffOccurrence;
+
+  if (!selectedOccurrence) {
+    return [];
+  }
+
+  const latestCrossedOffAt = latestCrossedOffOccurrence?.crossedOffAt;
+  const score = suggestedTargetScore(
+    activeOccurrences.length,
+    crossedOffOccurrences.length,
+    latestCrossedOffOccurrence,
+    context.newestCrossedOffAt
+  );
+  let targetList: TargetListEvidence;
+  if (activeOccurrence) {
+    targetList = {
+      itemId: activeOccurrence.itemId,
+      status: "active",
+    };
+  } else if (latestCrossedOffAt) {
+    targetList = {
+      crossedOffAt: latestCrossedOffAt,
+      itemId: selectedOccurrence.itemId,
+      status: "crossed_off",
+    };
+  } else {
+    return [];
+  }
+  const suggestedTarget: SuggestedTargetList = {
+    listId,
+    listName: selectedOccurrence.listName,
+    score,
+    confidence: targetConfidenceFor(score),
+    status: targetList.status === "active" ? "active" : "crossed_off",
+    itemId: selectedOccurrence.itemId,
+    value,
+    evidence: {
+      occurrenceCount: occurrences.length,
+      activeOccurrenceCount: activeOccurrences.length,
+      crossedOffOccurrenceCount: crossedOffOccurrences.length,
+    },
+    recommendedAction: recommendedActionForTarget(value, listId, targetList),
+  };
+
+  if (latestCrossedOffAt) {
+    suggestedTarget.evidence.latestCrossedOffAt = latestCrossedOffAt;
+  }
+
+  if (latestCrossedOffOccurrence?.crossedOffRank !== undefined) {
+    suggestedTarget.evidence.crossedOffRank = latestCrossedOffOccurrence.crossedOffRank;
+    suggestedTarget.evidence.crossedOffCount = latestCrossedOffOccurrence.crossedOffCount;
+  }
+
+  return [suggestedTarget];
+}
+
+function suggestedTargetScore(
+  activeOccurrenceCount: number,
+  crossedOffOccurrenceCount: number,
+  latestCrossedOffOccurrence: ShoppingOccurrence | undefined,
+  newestCrossedOffAt: number | undefined
+): number {
+  let score = Math.min((activeOccurrenceCount + crossedOffOccurrenceCount) * 6, 18);
+
+  if (activeOccurrenceCount > 0) {
+    score += 65;
+  } else if (crossedOffOccurrenceCount > 0) {
+    score += 35;
+  }
+
+  score += recencyScore(latestCrossedOffOccurrence?.crossedOffAt, newestCrossedOffAt, 25);
+  score += crossedOffRankScore(
+    latestCrossedOffOccurrence?.crossedOffRank,
+    latestCrossedOffOccurrence?.crossedOffCount,
+    20
+  );
+
+  return Math.round(score * 100) / 100;
+}
+
+function crossedOffRankScore(
+  crossedOffRank: number | undefined,
+  crossedOffCount: number | undefined,
+  maxScore: number
+): number {
+  if (crossedOffRank === undefined || crossedOffCount === undefined || crossedOffCount <= 0) {
+    return 0;
+  }
+
+  if (crossedOffRank <= 5) {
+    return maxScore;
+  }
+
+  if (crossedOffRank <= 20) {
+    return maxScore * 0.8;
+  }
+
+  if (crossedOffRank <= 50) {
+    return maxScore * 0.6;
+  }
+
+  if (crossedOffRank <= 100) {
+    return maxScore * 0.4;
+  }
+
+  if (crossedOffRank / crossedOffCount <= 0.25) {
+    return maxScore * 0.25;
+  }
+
+  return maxScore * 0.1;
+}
+
+function targetConfidenceFor(score: number): "high" | "medium" | "low" {
+  if (score >= 70) {
+    return "high";
+  }
+
+  if (score >= 45) {
+    return "medium";
+  }
+
+  return "low";
+}
+
 function getLatestCrossedOffAt(occurrences: ShoppingOccurrence[]): Timestamp | undefined {
   return occurrences.reduce<Timestamp | undefined>((latest, occurrence) => {
     if (!occurrence.crossedOffAt) {
@@ -970,15 +1189,44 @@ function confidenceFor(score: number, matchType: ItemMatchType): "high" | "mediu
 function recommendedAction(
   value: string,
   listId: string | undefined,
-  targetList: TargetListEvidence | undefined
+  targetList: TargetListEvidence | undefined,
+  suggestedTargets: SuggestedTargetList[]
 ): RecommendedAction {
   if (!listId) {
+    const target = confidentSuggestedTarget(suggestedTargets);
+    if (target) {
+      return target.recommendedAction;
+    }
+
     return {
       type: "choose_list",
       value,
     };
   }
 
+  return recommendedActionForTarget(value, listId, targetList);
+}
+
+function confidentSuggestedTarget(
+  suggestedTargets: SuggestedTargetList[]
+): SuggestedTargetList | undefined {
+  const [first, second] = suggestedTargets;
+  if (!first || first.confidence !== "high") {
+    return undefined;
+  }
+
+  if (second && first.score - second.score < suggestedTargetScoreMargin) {
+    return undefined;
+  }
+
+  return first;
+}
+
+function recommendedActionForTarget(
+  value: string,
+  listId: string,
+  targetList: TargetListEvidence | undefined
+): RecommendedAction {
   if (targetList?.status === "active") {
     return {
       type: "already_active",

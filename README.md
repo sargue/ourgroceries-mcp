@@ -45,10 +45,12 @@ npx -y @sergib/ourgroceries-mcp get-active-items --list-id LIST_ID
 npx -y @sergib/ourgroceries-mcp get-crossed-off-items --list-id LIST_ID --search "milk" --limit 20
 ```
 
-Use the resolver before adding ambiguous item text. It can tell you whether to add a new item,
-uncross an existing crossed-off item, or do nothing because the item is already active:
+Use the resolver before adding item text. It can infer a likely target list from history, tell you
+whether to add a new item, uncross an existing crossed-off item, or do nothing because the item is
+already active:
 
 ```bash
+npx -y @sergib/ourgroceries-mcp resolve-item-to-add --query "plátanos"
 npx -y @sergib/ourgroceries-mcp resolve-item-to-add --query "add olives" --list-id LIST_ID
 npx -y @sergib/ourgroceries-mcp add-item --list-id LIST_ID --value "olives"
 npx -y @sergib/ourgroceries-mcp uncross-item --list-id LIST_ID --item-id ITEM_ID
@@ -152,7 +154,7 @@ the config file, refresh both variables. Login debug output from
 
 - **View your lists:** See shopping-list IDs and item counts without dumping every item
 - **Read items:** Get active items or filtered crossed-off history for one list
-- **Resolve item names:** Turn natural-language item text into the value OurGroceries has seen before
+- **Resolve item names:** Turn natural-language or partial item text into known values and likely target lists
 - **Add items:** Add deterministic item values to any list with optional notes
 - **Remove items:** Delete items from your lists
 - **Update items:** Change item names, categories, notes, or star ratings
@@ -160,13 +162,17 @@ the config file, refresh both variables. Login debug output from
 
 ## Recommended Add Flow
 
-For ambiguous item names, use the resolver before mutating a list:
+For item add requests, use the resolver before mutating a list, even when the user gives only an item
+name or partial name:
 
 1. Call `resolve_item_to_add` with the user's text and, when known, `listId`.
-2. Review the top candidate and its `recommendedAction`.
-3. Call `add_item` only when the recommendation is `add_item`.
-4. Call `uncross_item` when the recommendation is `uncross_item`.
-5. Do not mutate when the recommendation is `already_active`.
+2. Review the top candidate, `suggestedTargets`, and `recommendedAction`.
+3. Follow `recommendedAction` when it is list-specific, even if the resolver inferred the list.
+4. Call `add_item` only when the recommendation is `add_item`.
+5. Call `uncross_item` when the recommendation is `uncross_item`.
+6. Do not mutate when the recommendation is `already_active`.
+7. Ask for a list only when the recommendation is `choose_list` and `suggestedTargets` are missing
+   or ambiguous.
 
 ## MCP Example Prompts
 

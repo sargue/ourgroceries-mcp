@@ -54,16 +54,21 @@ Unknown shopping-list IDs, invalid dates, negative limits, and negative offsets 
 
 `resolve_item_to_add` / `resolve-item-to-add --query TEXT [--list-id LIST_ID] [--limit N]`
 
-The resolver is read-only. Use it before adding ambiguous or natural-language item names. It returns
-candidates with match evidence, master metadata, shopping history, target-list status when a list is
-provided, and a `recommendedAction`.
+The resolver is read-only. Use it before adding ambiguous, partial, or natural-language item names.
+It returns candidates with match evidence, master metadata, shopping history, ranked
+`suggestedTargets`, target-list status when a list is provided, and a `recommendedAction`.
+
+When `listId` is omitted, the resolver ranks target lists from shopping-list history. Strong signals
+include an item being active on a list, recent crossed-off history, high crossed-off rank, and repeated
+occurrences on the same list. If the best suggestion is high-confidence and clearly ahead of the next
+suggestion, `recommendedAction` is list-specific. Otherwise it remains `choose_list`.
 
 Follow the recommendation:
 
 - `already_active`: do not mutate.
 - `uncross_item`: call `uncross_item` / `uncross-item`.
 - `add_item`: call `add_item` / `add-item` with the candidate value.
-- `choose_list`: pick a list before mutating.
+- `choose_list`: pick or ask for a list before mutating. Inspect `suggestedTargets` first.
 
 ## Mutation Operations
 

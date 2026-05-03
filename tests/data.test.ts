@@ -85,6 +85,12 @@ function createPayload() {
             addedCount: 30,
             lastAddedAt: oldCrossedOffAt,
           },
+          {
+            id: "master-flour-id",
+            value: "Flour",
+            name: "Flour",
+            addedCount: 3,
+          },
         ],
       },
       {
@@ -206,9 +212,34 @@ test("resolves item text using master frequency and target-list history", () => 
   });
   assert.equal(result.candidates[0]?.masterItemId, "master-olivas-id");
   assert.equal(result.candidates[0]?.history.shoppingOccurrenceCount, 1);
+  assert.deepEqual(result.candidates[0]?.suggestedTargets[0], {
+    listId: "list-id",
+    listName: "Groceries",
+    score: 86,
+    confidence: "high",
+    status: "crossed_off",
+    itemId: "crossed-olivas-id",
+    value: "Olivas",
+    evidence: {
+      occurrenceCount: 1,
+      activeOccurrenceCount: 0,
+      crossedOffOccurrenceCount: 1,
+      latestCrossedOffAt: {
+        epochMs: recentCrossedOffAt,
+        iso: new Date(recentCrossedOffAt).toISOString(),
+      },
+      crossedOffRank: 1,
+      crossedOffCount: 2,
+    },
+    recommendedAction: {
+      type: "uncross_item",
+      listId: "list-id",
+      itemId: "crossed-olivas-id",
+    },
+  });
 });
 
-test("resolver recommends already_active and choose_list actions when appropriate", () => {
+test("resolver recommends list actions from high-confidence suggestions", () => {
   const payload = createPayload();
 
   assert.deepEqual(
@@ -220,9 +251,18 @@ test("resolver recommends already_active and choose_list actions when appropriat
       itemId: "active-milk-id",
     }
   );
-  assert.deepEqual(resolveItemToAdd(payload, { query: "milk" }).candidates[0]?.recommendedAction, {
+
+  const milkWithoutList = resolveItemToAdd(payload, { query: "milk" }).candidates[0];
+  assert.deepEqual(milkWithoutList?.recommendedAction, {
+    type: "already_active",
+    listId: "list-id",
+    itemId: "active-milk-id",
+  });
+  assert.equal(milkWithoutList?.suggestedTargets[0]?.listName, "Groceries");
+
+  assert.deepEqual(resolveItemToAdd(payload, { query: "flour" }).candidates[0]?.recommendedAction, {
     type: "choose_list",
-    value: "Milk",
+    value: "Flour",
   });
   assert.throws(
     () => resolveItemToAdd(payload, { query: "   " }),

@@ -141,7 +141,7 @@ export class OurGroceriesServer {
           {
             name: "resolve_item_to_add",
             description:
-              "Resolve ambiguous or natural-language item text using the master catalog and shopping-list history before adding. Follow the recommendedAction, preferring uncross_item when an item already exists crossed off.",
+              "Resolve ambiguous or natural-language item text using the master catalog and shopping-list history before adding. Follow the recommendedAction. When no listId is provided, inspect suggestedTargets; high-confidence list history can produce a list-specific action.",
             inputSchema: {
               type: "object",
               properties: {

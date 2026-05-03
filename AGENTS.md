@@ -30,7 +30,7 @@ Tests live in `tests/` and compile to `build-test/`, which is ignored by Git.
 - `node build/cli.js get-settings`: print account settings and list schema version.
 - `node build/cli.js get-active-items --list-id LIST_ID`: print active items for a shopping list.
 - `node build/cli.js get-crossed-off-items --list-id LIST_ID [--search TEXT] [--crossed-off-after DATE] [--crossed-off-before DATE] [--sort-by crossedOffAt|name] [--asc|--desc] [--limit N] [--offset N]`: print filtered crossed-off item history.
-- `node build/cli.js resolve-item-to-add --query TEXT [--list-id LIST_ID] [--limit N]`: resolve natural-language item text against the master catalog and shopping history.
+- `node build/cli.js resolve-item-to-add --query TEXT [--list-id LIST_ID] [--limit N]`: resolve natural-language or partial item text against the master catalog and shopping history, including likely target-list suggestions when no list ID is provided.
 - `node build/cli.js add-item --list-id LIST_ID --value VALUE [--note NOTE]`: add an item and print JSON success.
 - `node build/cli.js remove-item --list-id LIST_ID --item-id ITEM_ID`: remove an item and print JSON success.
 - `node build/cli.js update-item --list-id LIST_ID --item-id ITEM_ID --new-value VALUE [--category-id CATEGORY_ID] [--note NOTE] [--star 0|1]`: update an item and print JSON success.
@@ -53,9 +53,10 @@ and the category container with `listType: "CATEGORY"`. Active shopping-list ite
 
 Master item IDs do not match shopping-list item IDs. Item resolution joins master catalog entries
 and shopping-list history by exact `value`, preserving master frequency (`addedCount`) and recent
-shopping-list history. Use `resolve_item_to_add` before ambiguous add operations, then follow its
-`recommendedAction`: add a new item, uncross an existing crossed-off item, or do nothing when the
-item is already active.
+shopping-list history. Use `resolve_item_to_add` before add operations when the user gives an item
+name, natural-language text, or a partial name. Follow its `recommendedAction`: add a new item,
+uncross an existing crossed-off item, do nothing when the item is already active, or ask for a list
+only when the action remains `choose_list` after inspecting `suggestedTargets`.
 
 Developer references live in `docs/`:
 

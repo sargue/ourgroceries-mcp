@@ -50,18 +50,32 @@ unless the user explicitly asks for raw output.
 
 ## Mutation Workflow
 
-Use resolver-first behavior for natural-language or ambiguous add requests:
+Use resolver-first behavior for item add requests, including when the user gives only an item name,
+a partial name, or a name without accents:
+
+```bash
+npx -y @sergib/ourgroceries-mcp resolve-item-to-add --query "plátanos"
+```
+
+Follow `recommendedAction` first. The resolver is read-only and can recommend a list-specific action
+even when `--list-id` was not provided, using `suggestedTargets` from active items, recent
+crossed-off history, crossed-off rank, and repeated list occurrences.
+
+- `add_item`: run `add-item` with the resolved value.
+- `uncross_item`: run `uncross-item` with the returned item ID.
+- `already_active`: do not mutate.
+- `choose_list`: inspect `suggestedTargets`; ask the user only when the list is still ambiguous or no
+  useful list history exists.
+
+When the user names a target list, pass its ID to the resolver:
 
 ```bash
 npx -y @sergib/ourgroceries-mcp resolve-item-to-add --query "add olives" --list-id LIST_ID
 ```
 
-Follow `recommendedAction`:
-
-- `add_item`: run `add-item` with the resolved value.
-- `uncross_item`: run `uncross-item` with the returned item ID.
-- `already_active`: do not mutate.
-- `choose_list`: ask the user which list to target.
+For bare item requests, do not call `add-item` directly. Resolve first, then use the exact candidate
+`value` and returned list/item IDs. Prefer `uncross-item` over `add-item` when the resolver says the
+item exists crossed off, because that avoids duplicate active items.
 
 Mutation commands:
 
@@ -73,8 +87,9 @@ npx -y @sergib/ourgroceries-mcp uncross-item --list-id LIST_ID --item-id ITEM_ID
 npx -y @sergib/ourgroceries-mcp remove-item --list-id LIST_ID --item-id ITEM_ID
 ```
 
-For item-name requests, read the target list first to resolve the item ID. Ask a brief clarifying
-question before mutating when the list or item is ambiguous.
+For update, remove, cross-off, or uncross requests by item name, read the target list first to
+resolve the item ID. Ask a brief clarifying question before mutating when the list or item is
+ambiguous.
 
 ## Errors
 
