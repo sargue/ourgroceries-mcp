@@ -1,6 +1,6 @@
 {
   "name": "@sergib/ourgroceries-mcp",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "CLI and MCP server for OurGroceries.com grocery list management",
   "type": "module",
   "main": "build/index.js",
