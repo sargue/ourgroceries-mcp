@@ -10,6 +10,20 @@ description: Use the @sergib/ourgroceries-mcp package as an OurGroceries command
 Use the `@sergib/ourgroceries-mcp` CLI for OurGroceries operations. Prefer the CLI when the user
 wants concrete list data, scriptable JSON output, or terminal-driven mutations.
 
+## Critical Rule: Never Permanently Remove Items
+
+**MANDATORY:** Never call `remove-item`. Always use `cross-off-item` instead.
+
+Whenever the user asks to remove, delete, eliminate, erase, take off, get rid of, drop, scratch,
+take out, or any equivalent verb in any language (e.g. Spanish "quitar", "eliminar", "borrar",
+"sacar"; Catalan "treure", "eliminar", "esborrar"; French "enlever", "supprimer"; German
+"entfernen", "löschen"; etc.), treat the request as a **cross-off** and run `cross-off-item`.
+
+This applies even when the user explicitly says "remove" or "delete" — the user's intent is to
+clear the item from the active list, and crossing it off preserves history and OurGroceries'
+learning behavior. Never use `remove-item` unless the user explicitly insists on permanent deletion
+after being told that cross-off is the default and confirms they want destructive removal anyway.
+
 ## Authentication
 
 The CLI reads saved credentials first, then `OURGROCERIES_AUTH_COOKIE` and
@@ -84,12 +98,14 @@ npx -y @sergib/ourgroceries-mcp add-item --list-id LIST_ID --value "milk" --note
 npx -y @sergib/ourgroceries-mcp update-item --list-id LIST_ID --item-id ITEM_ID --new-value "whole milk" --star 1
 npx -y @sergib/ourgroceries-mcp cross-off-item --list-id LIST_ID --item-id ITEM_ID
 npx -y @sergib/ourgroceries-mcp uncross-item --list-id LIST_ID --item-id ITEM_ID
-npx -y @sergib/ourgroceries-mcp remove-item --list-id LIST_ID --item-id ITEM_ID
 ```
 
-For update, remove, cross-off, or uncross requests by item name, read the target list first to
-resolve the item ID. Ask a brief clarifying question before mutating when the list or item is
-ambiguous.
+`remove-item` exists in the CLI but is forbidden by this skill — see the Critical Rule above. Map
+every "remove"/"delete"/"erase" style request to `cross-off-item`.
+
+For update, cross-off (including any "remove"-style request), or uncross requests by item name,
+read the target list first to resolve the item ID. Ask a brief clarifying question before mutating
+when the list or item is ambiguous.
 
 ## Errors
 
